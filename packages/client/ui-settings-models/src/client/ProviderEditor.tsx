@@ -511,6 +511,26 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 </div>
               )
               : null}
+            {/* A route's own User-Agent is a pi-ai concern: both families'
+                model calls carry the product attribution by default, and only
+                a pi-ai route's profile has the per-route override field. */}
+            {family === 'pi-ai'
+              ? (
+                <div className={styles['field']}>
+                  <span className={styles['fieldLabel']}>{t('customUserAgent')}</span>
+                  <input
+                    className={styles['input']}
+                    type="text"
+                    value={stringAt(draft, 'userAgent') ?? ''}
+                    placeholder={t('customUserAgentPlaceholder')}
+                    aria-label={t('customUserAgent')}
+                    disabled={disabled}
+                    onChange={(event) => { setField('userAgent', event.target.value) }}
+                  />
+                  <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
+                </div>
+              )
+              : null}
             {/* Both families edit the same rows through the same contract; only
                 the extras differ — DeepSeek's inherited capacities, pi-ai's
                 endpoint interrogation. */}

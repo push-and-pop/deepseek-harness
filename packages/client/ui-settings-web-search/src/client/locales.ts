@@ -7,6 +7,8 @@ export type WebSearchSettingsLocaleKey =
   | 'title' | 'description'
   | 'apiKey' | 'apiKeyHint' | 'apiKeySet' | 'apiKeyUnset'
   | 'baseUrl' | 'baseUrlHint' | 'maxUses' | 'maxUsesHint'
+  | 'userAgent' | 'userAgentHint'
+  | 'fetchTitle' | 'fetchDescription' | 'fetchUserAgentHint'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed' | 'invalidNumber'
 
@@ -22,6 +24,11 @@ export const en: Record<WebSearchSettingsLocaleKey, string> = {
   baseUrlHint: 'Leave blank to use the provider default.',
   maxUses: 'Max searches per request',
   maxUsesHint: 'How many times one request may search before it must answer.',
+  userAgent: 'User-Agent',
+  userAgentHint: 'Sent on every search request. Leave blank to use the default.',
+  fetchTitle: 'Web fetch',
+  fetchDescription: 'Set the User-Agent of the anonymous page fetcher.',
+  fetchUserAgentHint: 'Sent on every fetched page. Leave blank to use the default.',
   overridden: 'Overridden',
   reset: 'Reset to default',
   readOnly: 'This deployment stores settings read-only.',
@@ -44,6 +51,11 @@ export const zh: Record<WebSearchSettingsLocaleKey, string> = {
   baseUrlHint: '留空则使用提供方默认地址。',
   maxUses: '单次请求最多搜索次数',
   maxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
+  userAgent: 'User-Agent',
+  userAgentHint: '每次搜索请求都会携带；留空使用默认值。',
+  fetchTitle: '网页抓取',
+  fetchDescription: '设置匿名网页抓取的 User-Agent。',
+  fetchUserAgentHint: '抓取的每个页面请求都会携带；留空使用默认值。',
   overridden: '已覆盖',
   reset: '恢复默认',
   readOnly: '本部署的设置为只读。',

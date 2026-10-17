@@ -23,6 +23,7 @@ import {
   DEEPSEEK_DEFAULT_MAX_TOKENS,
   DEEPSEEK_DEFAULT_MAX_USES,
   DEEPSEEK_DEFAULT_MODEL,
+  DEEPSEEK_DEFAULT_USER_AGENT,
 } from './provider.ts'
 import type { DeepSeekSearchProviderOptions } from './provider.ts'
 
@@ -33,6 +34,7 @@ export {
   DEEPSEEK_DEFAULT_MAX_TOKENS,
   DEEPSEEK_DEFAULT_MAX_USES,
   DEEPSEEK_DEFAULT_MODEL,
+  DEEPSEEK_DEFAULT_USER_AGENT,
   DEEPSEEK_PROVIDER_ID,
 } from './provider.ts'
 export type { DeepSeekSearchLlmRequest, DeepSeekSearchProviderOptions } from './provider.ts'
@@ -61,6 +63,8 @@ export interface Config {
   maxTokens: Volatile<number>
   /** Maximum `web_search` server-tool uses per request. Defaults to 5. */
   maxUses: Volatile<number>
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent: Volatile<string>
 }
 
 export const Config = z.object({
@@ -74,6 +78,7 @@ export const Config = z.object({
   apiVersion: z.string().default(DEEPSEEK_DEFAULT_API_VERSION).volatile(),
   maxTokens: z.number().step(1).min(1).default(DEEPSEEK_DEFAULT_MAX_TOKENS).volatile(),
   maxUses: z.number().step(1).min(1).default(DEEPSEEK_DEFAULT_MAX_USES).volatile(),
+  userAgent: z.string().default(DEEPSEEK_DEFAULT_USER_AGENT).volatile(),
 })
 
 /**
@@ -127,6 +132,7 @@ function resolveOptions(
     apiVersion: config.apiVersion,
     maxTokens: config.maxTokens,
     maxUses: config.maxUses,
+    userAgent: config.userAgent,
     recordRequest: (request) => {
       ctx.get('agents')?.currentInitiator()?.session.append(
         'web/deepseek-search-llm-request',
@@ -141,5 +147,6 @@ export function apply(ctx: Context, config: Config): void {
   ctx.web.registerSearchProvider(new DeepSeekSearchProvider(() => resolveOptions(ctx, {
     apiKey: config.apiKey.get(), apiKeyEnv: config.apiKeyEnv.get(), baseURL: config.baseURL.get(), model: config.model.get(),
     apiVersion: config.apiVersion.get(), maxTokens: config.maxTokens.get(), maxUses: config.maxUses.get(),
+    userAgent: config.userAgent.get(),
   })))
 }

@@ -124,6 +124,19 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.headers[0]?.['user-agent']).toBe(userAgent())
   })
 
+  it('sends a configured route User-Agent in place of the attribution default', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, {
+      headers: { 'x-company': 'private' },
+      userAgent: 'acme-agent/2.0',
+    })
+    await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+    expect(server.headers[0]?.['x-company']).toBe('private')
+    // The route's configured `userAgent` is the one sanctioned override; the
+    // deployment `headers` dict still loses the reserved name.
+    expect(server.headers[0]?.['user-agent']).toBe('acme-agent/2.0')
+  })
+
   it('forwards common stream options and profile reasoning', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url, {

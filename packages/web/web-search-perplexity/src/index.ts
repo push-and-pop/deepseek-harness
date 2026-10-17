@@ -9,12 +9,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
-import { PerplexitySearchProvider, PERPLEXITY_DEFAULT_BASE_URL, PERPLEXITY_DEFAULT_MAX_TOKENS, PERPLEXITY_DEFAULT_MODEL } from './provider.ts'
+import { PerplexitySearchProvider, PERPLEXITY_DEFAULT_BASE_URL, PERPLEXITY_DEFAULT_MAX_TOKENS, PERPLEXITY_DEFAULT_MODEL, PERPLEXITY_DEFAULT_USER_AGENT } from './provider.ts'
 
 export {
   PERPLEXITY_DEFAULT_BASE_URL,
   PERPLEXITY_DEFAULT_MAX_TOKENS,
   PERPLEXITY_DEFAULT_MODEL,
+  PERPLEXITY_DEFAULT_USER_AGENT,
   PERPLEXITY_PROVIDER_ID,
   PerplexitySearchProvider,
 } from './provider.ts'
@@ -38,6 +39,8 @@ export interface Config {
   maxTokens?: number
   /** Recency window sent as `search_recency_filter`. Omitted = no filter. */
   searchRecency?: 'day' | 'week' | 'month' | 'year'
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -46,6 +49,7 @@ export const Config: z<Config> = z.object({
   model: z.string(),
   maxTokens: z.number().step(1).min(1),
   searchRecency: z.union(['day', 'week', 'month', 'year'] as const),
+  userAgent: z.string(),
 })
 
 /** Register the Perplexity search provider with `ctx.web`. */
@@ -57,6 +61,7 @@ export function apply(ctx: Context, config: Config): void {
     baseURL: config.baseURL ?? PERPLEXITY_DEFAULT_BASE_URL,
     model: config.model ?? PERPLEXITY_DEFAULT_MODEL,
     maxTokens: config.maxTokens ?? PERPLEXITY_DEFAULT_MAX_TOKENS,
+    userAgent: config.userAgent ?? PERPLEXITY_DEFAULT_USER_AGENT,
     ...config.searchRecency !== undefined ? { searchRecency: config.searchRecency } : {},
   }))
 }

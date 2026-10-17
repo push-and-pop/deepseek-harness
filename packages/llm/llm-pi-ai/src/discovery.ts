@@ -252,6 +252,8 @@ function usableProbeKey(raw: string): string {
 export interface StoredModelDiscoveryProfile {
   /** Deployment headers configured on the named route. */
   readonly headers: Readonly<Record<string, string>> | undefined
+  /** The route's configured `User-Agent`, overriding the attribution default when set. */
+  readonly userAgent?: string
   /** Resolve the named route's credential only when the draft carries none. */
   readonly resolveApiKey: () => Promise<string | undefined>
 }
@@ -324,6 +326,9 @@ export async function discoverModels(
       headers.set('authorization', `Bearer ${apiKey}`)
     }
     for (const [name, value] of Object.entries(attributionHeaders())) headers.set(name, value)
+    // The route's configured `User-Agent` is the one sanctioned override of
+    // the attribution value, mirroring the adapter's request-header merge.
+    if (stored?.userAgent !== undefined && stored.userAgent.trim() !== '') headers.set('user-agent', stored.userAgent)
     response = await fetch(url, {
       method: 'GET',
       headers,

@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider } from './provider.ts'
@@ -38,16 +39,16 @@ export interface Config {
   timeoutMs?: number
   /** Maximum number of same-origin redirect hops to follow. */
   maxRedirects?: number
-  /** `User-Agent` header sent on every request. */
-  userAgent?: string
+  /** `User-Agent` header sent on every request; live-editable through the settings surface. */
+  userAgent?: Volatile<string>
 }
 
-export const Config: z<Config> = z.object({
+export const Config = z.object({
   maxResponseBytes: z.number().default(5_000_000),
   maxBodyChars: z.number().default(100_000),
   timeoutMs: z.number().default(30_000),
   maxRedirects: z.number().default(5),
-  userAgent: z.string().default(DEFAULT_USER_AGENT),
+  userAgent: z.string().default(DEFAULT_USER_AGENT).volatile(),
 })
 
 /** Complete config after schemastery applies every field default. */
@@ -77,18 +78,21 @@ function assertNonNegativeInteger(name: string, value: number): void {
 
 /** Register the local HTTP(S) fetch provider with `ctx.web`. */
 export function apply(ctx: Context, config: Config): void {
-  // schemastery (Config) has already filled every defaulted field.
+  // schemastery (Config) has already filled every defaulted field. The
+  // `User-Agent` is a volatile field — a live reference — so the provider
+  // resolves its limits per request and a settings edit takes effect without
+  // re-registering the provider.
   const resolved = config as ResolvedConfig
   assertPositiveFinite('maxResponseBytes', resolved.maxResponseBytes)
   assertPositiveFinite('maxBodyChars', resolved.maxBodyChars)
   assertTimeoutMs(resolved.timeoutMs)
   assertNonNegativeInteger('maxRedirects', resolved.maxRedirects)
-  const limits: HttpFetchLimits = {
+  const limits = (): HttpFetchLimits => ({
     maxResponseBytes: resolved.maxResponseBytes,
     maxBodyChars: resolved.maxBodyChars,
     timeoutMs: resolved.timeoutMs,
     maxRedirects: resolved.maxRedirects,
-    userAgent: resolved.userAgent,
-  }
+    userAgent: resolved.userAgent.get(),
+  })
   ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
 }

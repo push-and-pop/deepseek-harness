@@ -9,6 +9,7 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, NS } from '../src/client/index.ts'
 import type { WebSearchCardFace } from '../src/client/index.ts'
+import type { WebFetchCardFace } from '../src/client/web-fetch-card-controller.ts'
 import { apply as hostApply } from '../src/index.ts'
 
 /** One Host view of a served namespace. */
@@ -67,6 +68,31 @@ describe('ui-settings-web-search apply', () => {
     expect(entry.locale).toBe(NS)
     const face = (entry.inject as () => Pick<WebSearchCardFace, 'hooks'>)()
     expect(Object.keys(face.hooks)).toEqual(['webSearchCard'])
+  })
+
+  it('registers the fetch page while the Host serves the fetch namespace', async () => {
+    const { ctx, slots } = await bench(['web-fetch-http'])
+    declareRoot(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(1) })
+    const entry = slots.entries('plugins.item')[0]!
+    expect(entry.options).toMatchObject({ id: 'web-fetch', order: 21 })
+    expect(resolveSlotLabel(entry.options.label)).toBe('网页抓取')
+    expect(entry.locale).toBe(NS)
+    const face = (entry.inject as () => Pick<WebFetchCardFace, 'hooks'>)()
+    expect(Object.keys(face.hooks)).toEqual(['webFetchCard'])
+  })
+
+  it('registers both pages while the Host serves both namespaces', async () => {
+    const { ctx, slots } = await bench(['web-search-deepseek', 'web-fetch-http'])
+    declareRoot(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('plugins.item')).toHaveLength(2) })
+    expect(slots.entries('plugins.item').map(entry => entry.options.id)).toEqual(['web-search', 'web-fetch'])
   })
 
   it('registers nothing while the namespace is not served', async () => {

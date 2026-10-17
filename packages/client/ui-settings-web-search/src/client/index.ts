@@ -1,9 +1,10 @@
 /**
- * The web-search provider's settings page, browser half: the key, the
- * endpoint, and the per-request search budget over the `web-search-deepseek`
- * namespace the provider registers. The page registers into the Plugins
- * page's `plugins.item` slot while the Host serves that namespace, so a
- * deployment without the provider shows no trace of it.
+ * The web-search and web-fetch providers' settings pages, browser half: the
+ * search key, endpoint, budget, and attribution `User-Agent` over the
+ * `web-search-deepseek` namespace that provider registers, plus the fetch
+ * `User-Agent` over the `web-fetch-http` namespace. Each page registers into
+ * the Plugins page's `plugins.item` slot while the Host serves its namespace,
+ * so a deployment without a provider shows no trace of it.
  */
 
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -17,12 +18,16 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: the ctx.remote Context merge and the forwarded-event key face.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { WebFetchCard } from './WebFetchCard.tsx'
+import { WEB_FETCH_NS, WebFetchCardController } from './web-fetch-card-controller.ts'
 import { WebSearchCard } from './WebSearchCard.tsx'
 import { WEB_SEARCH_NS, WebSearchCardController } from './web-search-card-controller.ts'
 import { en, zh, type WebSearchSettingsLocaleKey } from './locales.ts'
 
 export type { WebSearchCardProps } from './WebSearchCard.tsx'
+export type { WebFetchCardProps } from './WebFetchCard.tsx'
 export type { WebSearchCardFace, WebSearchCardState, WebSearchSettings } from './web-search-card-controller.ts'
+export type { WebFetchCardFace, WebFetchCardState, WebFetchSettings } from './web-fetch-card-controller.ts'
 export type { WebSearchSettingsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -39,7 +44,8 @@ export const NS = 'settings.webSearch'
 export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'configForms']
 
 /**
- * Mount the web-search settings page while the Host serves its namespace.
+ * Mount the web-search and web-fetch settings pages while the Host serves
+ * their namespaces.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -57,4 +63,9 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([WEB_SEARCH_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'web-search', order: 20, label: () => t('title'), locale: NS, inject: () => card.inject(),
   }, WebSearchCard))), 'ui-settings-web-search: page')
+  const fetchCard = new WebFetchCardController(ctx.configForms.get(WEB_FETCH_NS))
+  ctx.effect(() => () => { fetchCard.dispose() }, 'ui-settings-web-search: fetch form subscription')
+  ctx.effect(() => ctx.configForms.whileServed([WEB_FETCH_NS], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item', id: 'web-fetch', order: 21, label: () => t('fetchTitle'), locale: NS, inject: () => fetchCard.inject(),
+  }, WebFetchCard))), 'ui-settings-web-search: fetch page')
 }

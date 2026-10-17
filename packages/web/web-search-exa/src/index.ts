@@ -14,12 +14,14 @@ import {
   EXA_DEFAULT_BASE_URL,
   EXA_DEFAULT_HIGHLIGHTS_PER_RESULT,
   EXA_DEFAULT_SEARCH_TYPE,
+  EXA_DEFAULT_USER_AGENT,
 } from './provider.ts'
 
 export {
   EXA_DEFAULT_BASE_URL,
   EXA_DEFAULT_HIGHLIGHTS_PER_RESULT,
   EXA_DEFAULT_SEARCH_TYPE,
+  EXA_DEFAULT_USER_AGENT,
   EXA_PROVIDER_ID,
   ExaSearchProvider,
 } from './provider.ts'
@@ -43,6 +45,8 @@ export interface Config {
   numResults?: number
   /** Highlight sentences requested per result. Defaults to 1. */
   highlightsPerResult?: number
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -51,6 +55,7 @@ export const Config: z<Config> = z.object({
   searchType: z.union(['auto', 'keyword', 'neural'] as const),
   numResults: z.number().step(1).min(1),
   highlightsPerResult: z.number().step(1).min(1),
+  userAgent: z.string(),
 })
 
 /** Register the Exa search provider with `ctx.web`. */
@@ -62,6 +67,7 @@ export function apply(ctx: Context, config: Config): void {
     baseURL: config.baseURL ?? EXA_DEFAULT_BASE_URL,
     searchType: config.searchType ?? EXA_DEFAULT_SEARCH_TYPE,
     highlightsPerResult: config.highlightsPerResult ?? EXA_DEFAULT_HIGHLIGHTS_PER_RESULT,
+    userAgent: config.userAgent ?? EXA_DEFAULT_USER_AGENT,
     ...config.numResults !== undefined ? { numResults: config.numResults } : {},
   }))
 }

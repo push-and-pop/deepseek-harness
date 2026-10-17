@@ -105,6 +105,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [displayName, setDisplayName] = useState('')
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
+  const [userAgent, setUserAgent] = useState('')
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
@@ -170,6 +171,9 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         ...storesKey ? { apiKeyEnv: keyRef } : {},
         api: protocol,
         baseURL: normalizedBaseURL,
+        // A blank field keeps the product attribution identity; the Host
+        // validates the value when the profile resolves.
+        ...userAgent.trim().length === 0 ? {} : { userAgent: userAgent.trim() },
         models: models.map(model => ({ ...model })),
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
@@ -288,6 +292,19 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         {keyFailure === undefined
           ? null
           : <p className={styles['error']}>{t(keyFailure === 'keyBlank' ? 'keyBlankNew' : keyFailure)}</p>}
+      </div>
+      <div className={styles['field']}>
+        <span className={styles['fieldLabel']}>{t('customUserAgent')}</span>
+        <input
+          className={styles['input']}
+          type="text"
+          value={userAgent}
+          placeholder={t('customUserAgentPlaceholder')}
+          aria-label={t('customUserAgent')}
+          disabled={profileDisabled}
+          onChange={(event) => { setUserAgent(event.target.value) }}
+        />
+        <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
       </div>
       <ModelListEditor
         models={models}

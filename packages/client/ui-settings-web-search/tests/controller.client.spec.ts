@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError, stubConfigForm, type StubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
 import { WebSearchCardController, type WebSearchSettings } from '../src/client/web-search-card-controller.ts'
+import { WebFetchCardController, type WebFetchSettings } from '../src/client/web-fetch-card-controller.ts'
 
 /** Make the stub behave like a Host that accepts every write. */
 function acceptWrites<T>(host: StubConfigForm<T>): void {
@@ -210,5 +211,25 @@ describe('WebSearchCardController', () => {
 
     expect(host.mutate.mock.calls.map(([ops]) => ops)).toEqual([[['baseURL', 'https://other.test'], ['maxUses', 3]].map(([field, value]) => ({ op: 'set', path: [field], value }))])
     expect(credentials.set).not.toHaveBeenCalled()
+  })
+})
+
+describe('WebFetchCardController', () => {
+  it('stages and saves the User-Agent, and clears it back to the default', async () => {
+    const host = stubConfigForm<WebFetchSettings>()
+    acceptWrites(host)
+    const controller = new WebFetchCardController(host.scope)
+    host.publish({ status: 'ready', writable: true, value: { userAgent: 'default-agent/1.0' }, base: {}, user: {} })
+    const face = controller.inject()
+
+    face.edit('userAgent', 'custom-agent/2.0')
+    face.save()
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledTimes(1) })
+    expect(host.mutate.mock.calls[0]![0]).toEqual([{ op: 'set', path: ['userAgent'], value: 'custom-agent/2.0' }])
+
+    face.resetField('userAgent')
+    face.save()
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledTimes(2) })
+    expect(host.mutate.mock.calls[1]![0]).toEqual([{ op: 'unset', path: ['userAgent'] }])
   })
 })

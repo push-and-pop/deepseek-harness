@@ -40,13 +40,19 @@ export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
 
   /**
-   * @param limits - resolved transport and response limits.
+   * @param limits - resolved transport and response limits, or a resolver read
+   *   per request so live configuration edits reach the next fetch.
    * @param resolveAddresses - resolver that rejects non-public destinations before returning.
    */
   constructor(
-    private readonly limits: HttpFetchLimits,
+    private readonly limits: HttpFetchLimits | (() => HttpFetchLimits),
     private readonly resolveAddresses: HttpFetchResolver = publicHttpNetwork.resolve,
   ) {}
+
+  /** The limits this request applies: the resolver's answer or the static value. */
+  private get active(): HttpFetchLimits {
+    return typeof this.limits === 'function' ? this.limits() : this.limits
+  }
 
   /** No credentials to check — an anonymous public fetcher is always usable. */
   available(): boolean {
@@ -58,7 +64,7 @@ export class HttpFetchProvider implements WebFetchProvider {
 
     // One signal stops both the request and body read. The deadline's TimeoutReason later
     // distinguishes this provider's timeout from caller or outer-deadline cancellation.
-    using d = deadline(signal, this.limits.timeoutMs, 'WEB_FETCH_TIMEOUT')
+    using d = deadline(signal, this.active.timeoutMs, 'WEB_FETCH_TIMEOUT')
     return await this.followAndRead(request.url, d.signal)
   }
 
@@ -73,9 +79,9 @@ export class HttpFetchProvider implements WebFetchProvider {
       try {
         if (isRedirectStatus(response.status)) {
           // Enforce the redirect budget before resolving or validating the next hop.
-          if (redirectsFollowed >= this.limits.maxRedirects) {
+          if (redirectsFollowed >= this.active.maxRedirects) {
             await response.body?.cancel()
-            throw new WebError(`exceeded the maximum of ${this.limits.maxRedirects} redirects`, 'WEB_REDIRECT_BLOCKED')
+            throw new WebError(`exceeded the maximum of ${this.active.maxRedirects} redirects`, 'WEB_REDIRECT_BLOCKED')
           }
           const location = response.headers.get('location')
           if (location === null) {
@@ -116,7 +122,7 @@ export class HttpFetchProvider implements WebFetchProvider {
 
   private async requestOnce(url: URL, signal: AbortSignal) {
     const headers = {
-      'user-agent': this.limits.userAgent,
+      'user-agent': this.active.userAgent,
       'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8',
     }
     try {
@@ -164,8 +170,8 @@ export class HttpFetchProvider implements WebFetchProvider {
     }
     const { bytes, truncatedByBytes } = await this.readCapped(response, signal)
     const decoded = decoder.decode(bytes)
-    const truncatedByChars = decoded.length > this.limits.maxBodyChars
-    const content = truncatedByChars ? decoded.slice(0, this.limits.maxBodyChars) : decoded
+    const truncatedByChars = decoded.length > this.active.maxBodyChars
+    const content = truncatedByChars ? decoded.slice(0, this.active.maxBodyChars) : decoded
     const body: WebFetchBody = kind === 'html' ? { kind: 'html', content } : { kind: 'text', content }
 
     return {
@@ -186,9 +192,9 @@ export class HttpFetchProvider implements WebFetchProvider {
     const declared = response.headers.get('content-length')
     if (declared !== null) {
       const length = Number(declared)
-      if (Number.isFinite(length) && length > this.limits.maxResponseBytes) {
+      if (Number.isFinite(length) && length > this.active.maxResponseBytes) {
         await response.body?.cancel()
-        throw new WebError(`response exceeds the maximum of ${this.limits.maxResponseBytes} bytes`, 'WEB_FETCH_TOO_LARGE')
+        throw new WebError(`response exceeds the maximum of ${this.active.maxResponseBytes} bytes`, 'WEB_FETCH_TOO_LARGE')
       }
     }
 
@@ -204,7 +210,7 @@ export class HttpFetchProvider implements WebFetchProvider {
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
-        const remaining = this.limits.maxResponseBytes - total
+        const remaining = this.active.maxResponseBytes - total
         // Only DROPPED bytes count as truncation: a chunk that exactly fills the
         // remaining capacity keeps all its bytes and we read on to observe EOF,
         // so an exactly-at-cap body is not falsely flagged truncated.

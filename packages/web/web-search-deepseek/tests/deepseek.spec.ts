@@ -11,6 +11,7 @@ import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import type { DeepSeekAccount } from '@deepseek-ai/dsh-deepseek-account'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import WebRuntime, { WebError } from '@deepseek-ai/dsh-web'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import {
   DeepSeekSearchProvider,
   DEEPSEEK_PROVIDER_ID,
@@ -634,6 +635,20 @@ describe('web-search-deepseek plugin registration', () => {
       if (prev === undefined) delete process.env.DEEPSEEK_API_KEY
       else process.env.DEEPSEEK_API_KEY = prev
     }
+  })
+
+  it('sends the configured User-Agent and applies a live edit without re-registering', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(searchResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { searchProvider: DEEPSEEK_PROVIDER_ID })
+    const live = await liveConfig(ctx, deepseekPlugin, { apiKey: 'ds-key', userAgent: 'custom-agent/2.0' })
+    await ctx.web.search({ query: 'q' })
+    await live.update({ userAgent: 'edited-agent/3.0' })
+    await ctx.web.search({ query: 'q' })
+    const headers = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).headers as Record<string, string>)
+    expect(headers.map(value => value['user-agent'])).toEqual(['custom-agent/2.0', 'edited-agent/3.0'])
+    await ctx.fiber.dispose()
   })
 
   it('resolves the credential for each search so a stored or rotated key needs no restart', async () => {

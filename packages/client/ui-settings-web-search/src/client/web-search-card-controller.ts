@@ -38,6 +38,8 @@ export interface WebSearchSettings {
   baseURL?: string
   /** Maximum searches served within one request. */
   maxUses?: number
+  /** Attribution `User-Agent` header; blank inherits the provider default. */
+  userAgent?: string
 }
 
 /** What the credentials domain last reported, and for which reference. */
@@ -56,6 +58,8 @@ export interface WebSearchCardState extends SettingsFormShell {
   baseURL: SettingsFieldState
   /** Searches allowed per request. */
   maxUses: SettingsFieldState
+  /** The staged attribution `User-Agent`. */
+  userAgent: SettingsFieldState
   /** The staged credential, which starts blank on every load. */
   apiKey: SettingsFieldState
   /** Whether the Host reports a credential configured for the referenced key. */
@@ -90,7 +94,7 @@ export class WebSearchCardController {
   ) {
     this.form = new SettingsFormModel(
       scope,
-      [settingsTextField('baseURL'), settingsNumberField('maxUses')],
+      [settingsTextField('baseURL'), settingsNumberField('maxUses'), settingsTextField('userAgent')],
       [{ field: API_KEY_FIELD, write: text => this.writeKey(text) }],
     )
     this.store = this.form.bind(() => this.projection())
@@ -103,6 +107,7 @@ export class WebSearchCardController {
       ...this.form.shell(),
       baseURL: this.form.field('baseURL'),
       maxUses: this.form.field('maxUses'),
+      userAgent: this.form.field('userAgent'),
       apiKey: this.form.field(API_KEY_FIELD),
       apiKeyConfigured: this.credential.configured,
       apiKeyWritable: this.credential.writable,

@@ -67,6 +67,18 @@ export function WebSearchCard(props: WebSearchCardProps) {
         onEdit={(text) => { props.edit('maxUses', text) }}
         onReset={() => { props.resetField('maxUses') }}
       />
+      <SettingsValueField
+        id="plugin-config-web-search-user-agent"
+        label={t('userAgent')}
+        hint={t('userAgentHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('invalidNumber')}
+        disabled={disabled}
+        {...state.userAgent}
+        onEdit={(text) => { props.edit('userAgent', text) }}
+        onReset={() => { props.resetField('userAgent') }}
+      />
     </SettingsForm>
   )
 }

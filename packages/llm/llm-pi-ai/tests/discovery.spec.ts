@@ -297,6 +297,36 @@ describe('draft-provider model discovery', () => {
       .toEqual(['private-tenant', 'private-tenant', undefined, undefined])
   })
 
+  it('sends a configured route User-Agent in place of the attribution default', async () => {
+    const server = await listingServer({ body: JSON.stringify({ data: [{ id: 'm' }] }) })
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'named-gateway': {
+          api: 'openai-completions',
+          baseURL: server.url,
+          userAgent: 'acme-agent/2.0',
+          models: [{ id: 'acme-large' }],
+        },
+        'blank-gateway': {
+          api: 'openai-completions',
+          baseURL: server.url,
+          userAgent: '   ',
+          models: [{ id: 'plain-large' }],
+        },
+      },
+    })
+
+    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'named-gateway', baseURL: server.url })
+    await ctx.llm.discoverModels('llm-pi-ai', { provider: 'blank-gateway', baseURL: server.url })
+
+    // A configured value replaces the attribution `User-Agent`; a whitespace
+    // one reads as unset and keeps the product identity.
+    expect(server.headers.map(headers => headers['user-agent']))
+      .toEqual(['acme-agent/2.0', userAgent()])
+  })
+
   it('leaves a catalog route\'s credential unresolved, having never reached the network', async () => {
     // The catalog answers before any endpoint is asked, so a route whose
     // profile names a credential that is not set must still answer rather than

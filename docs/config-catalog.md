@@ -1777,7 +1777,7 @@ export interface Config extends ProtocolConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:222`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:228`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1852,6 +1852,12 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
+  /**
+   * `User-Agent` this route's requests send, overriding the Harness attribution
+   * default. Applies to model calls and to this route's model-listing probe
+   * alike; omission keeps the product identity.
+   */
+  userAgent?: string
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -4362,7 +4368,8 @@ export interface Config {
 ## `@deepseek-ai/dsh-web-fetch-http`
 
 - `inject`: `web`
-- `source`: [`packages/web/web-fetch-http/src/index.ts:32`](../packages/web/web-fetch-http/src/index.ts)
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/web/web-fetch-http/src/index.ts:33`](../packages/web/web-fetch-http/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the provider's transport and size limits plus its `User-Agent` (all defaulted). */
@@ -4375,8 +4382,8 @@ export interface Config {
   timeoutMs?: number
   /** Maximum number of same-origin redirect hops to follow. */
   maxRedirects?: number
-  /** `User-Agent` header sent on every request. */
-  userAgent?: string
+  /** `User-Agent` header sent on every request; live-editable through the settings surface. */
+  userAgent?: Volatile<string>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-fetch-http -->
@@ -4388,7 +4395,7 @@ export interface Config {
 
 - `inject`: `web`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/web/web-search-deepseek/src/index.ts:49`](../packages/web/web-search-deepseek/src/index.ts)
+- `source`: [`packages/web/web-search-deepseek/src/index.ts:51`](../packages/web/web-search-deepseek/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */
@@ -4407,6 +4414,8 @@ export interface Config {
   maxTokens: Volatile<number>
   /** Maximum `web_search` server-tool uses per request. Defaults to 5. */
   maxUses: Volatile<number>
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent: Volatile<string>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-deepseek -->
@@ -4417,7 +4426,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-web-search-exa`
 
 - `inject`: `web`
-- `source`: [`packages/web/web-search-exa/src/index.ts:35`](../packages/web/web-search-exa/src/index.ts)
+- `source`: [`packages/web/web-search-exa/src/index.ts:37`](../packages/web/web-search-exa/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */
@@ -4432,6 +4441,8 @@ export interface Config {
   numResults?: number
   /** Highlight sentences requested per result. Defaults to 1. */
   highlightsPerResult?: number
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-exa -->
@@ -4442,7 +4453,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-web-search-perplexity`
 
 - `inject`: `web`
-- `source`: [`packages/web/web-search-perplexity/src/index.ts:30`](../packages/web/web-search-perplexity/src/index.ts)
+- `source`: [`packages/web/web-search-perplexity/src/index.ts:31`](../packages/web/web-search-perplexity/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */
@@ -4457,6 +4468,8 @@ export interface Config {
   maxTokens?: number
   /** Recency window sent as `search_recency_filter`. Omitted = no filter. */
   searchRecency?: 'day' | 'week' | 'month' | 'year'
+  /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
+  userAgent?: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-perplexity -->

@@ -6,6 +6,7 @@ import WebRuntime from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@deepseek-ai/dsh-web-fetch-http'
 import type { HttpFetchLimits, HttpFetchResolver } from '@deepseek-ai/dsh-web-fetch-http'
 import * as fetchPlugin from '@deepseek-ai/dsh-web-fetch-http'
+import { liveConfig } from '../../../settings/settings/tests/live-config.ts'
 import { createPinnedLookup, isPublicIpAddress, publicHttpNetwork, requestPinned, resolvePublicAddresses } from '../src/network.ts'
 import {
   classifyContentType,
@@ -624,5 +625,29 @@ describe('web-fetch-http plugin registration', () => {
     await expect(ctx.web.fetch({ url: `${base}/` }))
       .resolves.toMatchObject({ statusCode: 200 })
     await fiber.dispose()
+  })
+
+  it('applies a live User-Agent edit to the next fetch without re-registering', async () => {
+    const seen: Array<string | undefined> = []
+    handler = (req, res) => { seen.push(req.headers['user-agent']); res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok') }
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
+    const live = await liveConfig(ctx, fetchPlugin, { userAgent: 'first-agent/1.0' })
+    await ctx.web.fetch({ url: `${base}/` })
+    await live.update({ userAgent: 'second-agent/2.0' })
+    await ctx.web.fetch({ url: `${base}/` })
+    expect(seen).toEqual(['first-agent/1.0', 'second-agent/2.0'])
+    await ctx.fiber.dispose()
+  })
+
+  it('resolves limits per request when constructed with a resolver', async () => {
+    const seen: Array<string | undefined> = []
+    handler = (req, res) => { seen.push(req.headers['user-agent']); res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok') }
+    let userAgent = 'resolver-agent/1.0'
+    const dynamic = new HttpFetchProvider(() => ({ ...limits, userAgent }))
+    await dynamic.fetch({ url: `${base}/` })
+    userAgent = 'resolver-agent/2.0'
+    await dynamic.fetch({ url: `${base}/` })
+    expect(seen).toEqual(['resolver-agent/1.0', 'resolver-agent/2.0'])
   })
 })

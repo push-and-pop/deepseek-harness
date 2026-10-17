@@ -150,6 +150,12 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
+  /**
+   * `User-Agent` this route's requests send, overriding the Harness attribution
+   * default. Applies to model calls and to this route's model-listing probe
+   * alike; omission keeps the product identity.
+   */
+  userAgent?: string
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -335,6 +341,7 @@ const profile = z.object({
   defaultMaxTokens: z.number().step(1).min(1).default(DEFAULT_MAX_TOKENS),
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
   headers: z.dict(z.string()),
+  userAgent: z.string(),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
@@ -399,6 +406,19 @@ function assertValidHeaders(provider: string, headers: Readonly<Record<string, s
   }
 }
 
+/** Reject a profile User-Agent that Fetch cannot put on a provider request. */
+function assertValidUserAgent(provider: string, userAgent: string | undefined): void {
+  if (userAgent === undefined) return
+  try {
+    new Headers([['user-agent', userAgent]])
+  } catch {
+    throw new Error(
+      `llm-pi-ai: provider "${provider}" userAgent is not valid for Fetch;`
+      + ' use a single-line value representable as bytes',
+    )
+  }
+}
+
 /**
  * Resolve scalar defaults and materialize each route's serviceable models.
  * Deferred catalog validation retains diagnostics without deleting configured
@@ -426,6 +446,7 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     assertValidHeaders(provider, source.headers)
+    assertValidUserAgent(provider, source.userAgent)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0

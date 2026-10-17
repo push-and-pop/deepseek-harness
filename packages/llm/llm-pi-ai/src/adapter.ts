@@ -213,13 +213,22 @@ function reasoningInfo(
   }
 }
 
-/** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+/**
+ * Merge deployment headers while removing case-insensitive attribution
+ * collisions. The route's configured `userAgent` replaces the attribution
+ * value for that one header; a collision inside the route's deployment-owned
+ * `headers` dict still loses to attribution.
+ */
+function requestHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+  userAgent: string | undefined,
+): Record<string, string> {
   const attribution = attributionHeaders()
-  const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+  const attributionNames = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
   return {
-    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
+    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !attributionNames.has(name.toLowerCase()))),
     ...attribution,
+    ...userAgent === undefined || userAgent.trim() === '' ? {} : { 'user-agent': userAgent },
   }
 }
 
@@ -420,8 +429,9 @@ export class PiAiAdapter extends LlmAdapter {
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
-        // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        // Harness-owned and therefore win collisions. The route's configured
+        // `userAgent` is the one sanctioned override of the attribution value.
+        headers: requestHeaders(profile.headers, profile.userAgent),
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
       let exhausted = false

@@ -268,6 +268,7 @@ export function apply(ctx: Context, config: Config): void {
     if (profile === undefined) return undefined
     return {
       headers: profile.headers,
+      ...profile.userAgent === undefined ? {} : { userAgent: profile.userAgent },
       resolveApiKey: () => resolveApiKey(provider, profile),
     }
   }
