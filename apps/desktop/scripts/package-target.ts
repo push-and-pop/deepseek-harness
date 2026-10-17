@@ -257,6 +257,26 @@ export function parseDesktopPackageInvocation(
 }
 
 /**
+ * Degrade a signed Windows invocation to the unsigned flow when the selected
+ * environment carries no signing material at all. A local build has no
+ * certificate to declare, and the unsigned flow already produces a usable
+ * artifact; a preset-selected release deployment keeps its fail-stop check, so
+ * a CI job with a missing certificate still fails.
+ * @param invocation - Parsed command line.
+ * @param environment - Loaded packaging environment.
+ * @returns The invocation to run, flipped to unsigned when it cannot be signed.
+ */
+export function applyWindowsUnsignedFallback(
+  invocation: DesktopPackageInvocation,
+  environment: NodeJS.ProcessEnv,
+): DesktopPackageInvocation {
+  if (invocation.target.platform !== 'win32' || invocation.unsigned) return invocation
+  if (environment.DSH_PACKAGING_PRESET !== undefined) return invocation
+  if ((environment.DSH_DESKTOP_WINDOWS_CER_FILE ?? '').trim() !== '') return invocation
+  return { ...invocation, unsigned: true }
+}
+
+/**
  * Build the electron-builder command arguments for one validated target.
  * @param target - Supported release target.
  * @param directory - Whether to stop at an unpacked application directory.
@@ -338,7 +358,7 @@ async function resolveRequestedBuildVersion(
 }
 
 async function main(): Promise<void> {
-  const invocation = parseDesktopPackageInvocation(process.argv.slice(2))
+  let invocation = parseDesktopPackageInvocation(process.argv.slice(2))
   const { target } = invocation
   if (invocation.skipNotarization) {
     process.stdout.write('desktop package: skipping notarization and stapling; internal debugging only, not qualified for distribution or update publishing\n')
@@ -348,6 +368,14 @@ async function main(): Promise<void> {
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
+  // A local Windows build that names no signing material would otherwise stop
+  // at environment validation with nothing the caller can supply there. Take
+  // the unsigned flow this command already supports instead, saying so.
+  const unsigned = applyWindowsUnsignedFallback(invocation, environment)
+  if (unsigned !== invocation) {
+    invocation = unsigned
+    process.stdout.write('desktop package: no Windows signing certificate configured; building an unsigned local artifact instead (declare DSH_DESKTOP_WINDOWS_CER_FILE to sign)\n')
+  }
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.

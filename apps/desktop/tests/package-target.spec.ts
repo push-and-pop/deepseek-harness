@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyWindowsUnsignedFallback,
   desktopElectronBuilderArguments,
   desktopElectronBuilderEnvironment,
   parseDesktopPackageInvocation,
@@ -56,6 +57,21 @@ describe('desktop package target', () => {
     expect(parseDesktopPackageInvocation(['--', '--check'], 'darwin', 'arm64').check).toBe(true)
     expect(() => parseDesktopPackageInvocation(['mac-arm64', '--build-version', '  '], 'darwin', 'arm64'))
       .toThrow(/--build-version requires a value/u)
+  })
+
+  it('falls back to the unsigned flow when a local Windows build declares no certificate', () => {
+    const invocation = parseDesktopPackageInvocation(['win-x64', '--dir'], 'win32', 'x64')
+    // Local Windows build without signing material: take the unsigned flow.
+    expect(applyWindowsUnsignedFallback(invocation, {}).unsigned).toBe(true)
+    // Signing material configured: keep the signed flow.
+    expect(applyWindowsUnsignedFallback(invocation, { DSH_DESKTOP_WINDOWS_CER_FILE: 'cert.cer' }).unsigned).toBe(false)
+    // A preset-selected release deployment keeps its fail-stop check.
+    expect(applyWindowsUnsignedFallback(invocation, { DSH_PACKAGING_PRESET: 'production' }).unsigned).toBe(false)
+    // Already-unsigned and non-Windows invocations pass through untouched.
+    const unsigned = parseDesktopPackageInvocation(['win-x64', '--unsigned'], 'win32', 'x64')
+    expect(applyWindowsUnsignedFallback(unsigned, {})).toBe(unsigned)
+    const mac = parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64')
+    expect(applyWindowsUnsignedFallback(mac, {})).toBe(mac)
   })
 
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {
