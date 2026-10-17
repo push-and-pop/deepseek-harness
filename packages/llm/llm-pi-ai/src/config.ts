@@ -157,10 +157,11 @@ export interface PiAiProviderProfile {
    */
   userAgent?: string
   /**
-   * Whether a failed model request retries on this same gateway instead of
-   * surfacing the error. `false` (the default) reports the failure; `true`
-   * retries with the adapter's normal five-retry backoff policy. Each provider
-   * decides independently, and an explicit `retryPolicy` wins over this switch.
+   * Keep a failed model request on this same gateway. `false` (the default)
+   * keeps the adapter's normal policy: up to five retries with exponential
+   * backoff. `true` retries without backoff until the request succeeds or is
+   * cancelled. Each provider decides independently, and an explicit
+   * `retryPolicy` wins over this switch.
    */
   retryOnFailure?: boolean
   /** Provider-neutral pi-ai reasoning level. */
@@ -519,14 +520,18 @@ export function resolveProfiles(
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
     // `retryOnFailure` is the curated on/off switch for the Models page; an
     // explicit `retryPolicy` stays the deployment escape hatch and wins. Off
-    // (the default) resolves to a policy that never retries, so a failed
-    // request surfaces instead of being re-issued; on adopts the adapter's
-    // normal five-retry default.
+    // (the default) keeps the adapter's long-standing five-retry backoff
+    // policy; on retries without backoff until the request succeeds or is
+    // cancelled. The policy schema refuses a zero delay, so the tightest one
+    // it accepts — one millisecond, no jitter — carries "no backoff".
     const routeRetryPolicy = retryPolicy !== undefined
       ? resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`)
       : source.retryOnFailure === true
-        ? resolveRetryPolicy(undefined, `llm-pi-ai: provider "${provider}" retryPolicy`)
-        : resolveRetryPolicy({ mode: 'normal', maxRetries: 0 }, `llm-pi-ai: provider "${provider}" retryPolicy`)
+        ? resolveRetryPolicy(
+          { mode: 'always', backoff: { initialDelayMs: 1, maxDelayMs: 1, jitterRatio: 0 } },
+          `llm-pi-ai: provider "${provider}" retryPolicy`,
+        )
+        : resolveRetryPolicy(undefined, `llm-pi-ai: provider "${provider}" retryPolicy`)
     resolved.set(provider, {
       ...rest,
       provider,

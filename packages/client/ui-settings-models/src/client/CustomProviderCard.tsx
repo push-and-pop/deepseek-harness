@@ -17,8 +17,9 @@
  * and at least one model — are required here rather than at load, so the
  * failure names the field while the user is still looking at it. The optional
  * User-Agent and the per-route "continue on this gateway after a failure"
- * switch travel with the profile; the switch defaults off, so a failure
- * reports instead of silently re-issuing the request.
+ * switch travel with the profile; the switch defaults off, which keeps the
+ * adapter's normal five-retry backoff policy, and when on keeps retrying
+ * without backoff until the request succeeds or is cancelled.
  *
  * There is deliberately no provider-scoped reasoning-effort control, here or
  * on the editor card: effort is a per-MODEL capability, and the models under

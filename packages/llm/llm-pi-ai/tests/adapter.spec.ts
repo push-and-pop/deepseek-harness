@@ -492,16 +492,17 @@ describe('provider profile lifecycle', () => {
       jitterRatio: 0.2,
     })
     // A profile that neither names a policy nor opts into `retryOnFailure`
-    // reports failures instead of re-issuing them: the curated switch defaults
-    // to off and the resolved policy carries the zero-retry shape.
+    // keeps the adapter's long-standing default: normal mode, five retries.
     expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchObject({
       mode: 'normal',
-      maxRetries: 0,
-    })
-    // The switch restores the adapter's normal five-retry default.
-    expect(ctx.llm.providerRetryPolicy('gw-retry')).toMatchObject({
-      mode: 'normal',
       maxRetries: 5,
+    })
+    // The switch retries without backoff until success or cancellation.
+    expect(ctx.llm.providerRetryPolicy('gw-retry')).toEqual({
+      mode: 'always',
+      initialDelayMs: 1,
+      maxDelayMs: 1,
+      jitterRatio: 0,
     })
     await fiber.dispose()
     expect(ctx.llm.listProviders()).toEqual([])
