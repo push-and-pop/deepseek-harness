@@ -15,7 +15,10 @@
  *
  * The three fields a hand-declared route cannot default — endpoint, protocol,
  * and at least one model — are required here rather than at load, so the
- * failure names the field while the user is still looking at it.
+ * failure names the field while the user is still looking at it. The optional
+ * User-Agent and the per-route "continue on this gateway after a failure"
+ * switch travel with the profile; the switch defaults off, so a failure
+ * reports instead of silently re-issuing the request.
  *
  * There is deliberately no provider-scoped reasoning-effort control, here or
  * on the editor card: effort is a per-MODEL capability, and the models under
@@ -106,6 +109,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
   const [userAgent, setUserAgent] = useState('')
+  const [retryOnFailure, setRetryOnFailure] = useState(false)
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
@@ -174,6 +178,9 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         // A blank field keeps the product attribution identity; the Host
         // validates the value when the profile resolves.
         ...userAgent.trim().length === 0 ? {} : { userAgent: userAgent.trim() },
+        // Off is the product default, so only the switch that changes behavior
+        // is written; the Host resolves the retry policy from it.
+        ...retryOnFailure ? { retryOnFailure: true } : {},
         models: models.map(model => ({ ...model })),
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
@@ -305,6 +312,19 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           onChange={(event) => { setUserAgent(event.target.value) }}
         />
         <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
+      </div>
+      <div className={styles['field']}>
+        <label className={styles['checkboxLabel']}>
+          <input
+            type="checkbox"
+            checked={retryOnFailure}
+            aria-label={t('customRetryOnFailure')}
+            disabled={profileDisabled}
+            onChange={(event) => { setRetryOnFailure(event.target.checked) }}
+          />
+          <span>{t('customRetryOnFailure')}</span>
+        </label>
+        <p className={styles['advancedHint']}>{t('customRetryOnFailureHint')}</p>
       </div>
       <ModelListEditor
         models={models}

@@ -635,10 +635,11 @@ describe('endpoint interrogation', () => {
 
     fireEvent.click(screen.getByText(en.fetchModels))
     await screen.findByText(en.fetchTitle)
+    const dialog = await screen.findByRole('dialog')
     expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'fresh' }).checked).toBe(true)
     expect(screen.queryByRole('checkbox', { name: 'Fresh' })).toBeNull()
     // The already-configured row starts unchecked; the new one starts checked.
-    const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    const boxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     expect(boxes.map(box => box.checked)).toEqual([false, true])
     fireEvent.click(screen.getByText(en.fetchAdopt))
 
@@ -754,7 +755,8 @@ describe('endpoint interrogation', () => {
 
     fireEvent.click(screen.getByText(en.fetchModels))
     await screen.findByText(en.fetchTitle)
-    const boxes = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    const dialog = await screen.findByRole('dialog')
+    const boxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     const first = boxes[0] as HTMLInputElement
     fireEvent.click(first)
     fireEvent.click(first)
@@ -945,7 +947,10 @@ describe('hand-declared providers', () => {
 
     mountCard()
     fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme' } })
-    expect(fields()).toEqual([en.customRoute, en.customDisplayName, en.baseUrl, en.customApi, en.keyInput, en.customUserAgent])
+    expect(fields()).toEqual([
+      en.customRoute, en.customDisplayName, en.baseUrl, en.customApi, en.keyInput,
+      en.customUserAgent, en.customRetryOnFailure,
+    ])
     cleanup()
 
     // A shipped route's models each carry their own protocol, so its editor
@@ -953,7 +958,7 @@ describe('hand-declared providers', () => {
     await mountSection({ providers: { openai: { apiKeyEnv: 'OPENAI_API_KEY' } } })
     openEditor('openai')
     fireEvent.click(screen.getByText(en.customized))
-    expect(fields()).toEqual([en.keyInput, en.baseUrl, en.customUserAgent])
+    expect(fields()).toEqual([en.keyInput, en.baseUrl, en.customUserAgent, en.customRetryOnFailure])
     cleanup()
 
     // A hand-declared route named its own protocol at creation, so editing it
@@ -963,7 +968,22 @@ describe('hand-declared providers', () => {
       declaredRoutes: ['acme-gateway'],
     })
     openEditor('acme-gateway')
-    expect(fields()).toEqual([en.keyInput, en.customDisplayName, en.baseUrl, en.customApi, en.customUserAgent])
+    expect(fields()).toEqual([en.keyInput, en.customDisplayName, en.baseUrl, en.customApi, en.customUserAgent, en.customRetryOnFailure])
+  })
+
+  it('writes the per-route failure switch to the profile the card edited', async () => {
+    const { mutate } = await mountSection({
+      providers: { 'acme-gateway': { baseURL: 'https://acme.test/v1', models: [{ id: 'm' }] } },
+      declaredRoutes: ['acme-gateway'],
+    })
+    openEditor('acme-gateway')
+
+    fireEvent.click(screen.getByLabelText(en.customRetryOnFailure))
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    expect(firstMutate(mutate).ops)
+      .toEqual([{ op: 'set', path: ['providers', 'acme-gateway', 'retryOnFailure'], value: true }])
   })
 
   it('renames a declared route and falls back to its id when the name is cleared', async () => {

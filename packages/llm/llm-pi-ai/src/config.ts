@@ -156,6 +156,13 @@ export interface PiAiProviderProfile {
    * alike; omission keeps the product identity.
    */
   userAgent?: string
+  /**
+   * Whether a failed model request retries on this same gateway instead of
+   * surfacing the error. `false` (the default) reports the failure; `true`
+   * retries with the adapter's normal five-retry backoff policy. Each provider
+   * decides independently, and an explicit `retryPolicy` wins over this switch.
+   */
+  retryOnFailure?: boolean
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -342,6 +349,7 @@ const profile = z.object({
   defaultInput: z.array(z.union(MODALITIES)).default([...DEFAULT_INPUT]),
   headers: z.dict(z.string()),
   userAgent: z.string(),
+  retryOnFailure: z.boolean().default(false),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
@@ -509,6 +517,16 @@ export function resolveProfiles(
       catalogError ??= error.message
     }
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    // `retryOnFailure` is the curated on/off switch for the Models page; an
+    // explicit `retryPolicy` stays the deployment escape hatch and wins. Off
+    // (the default) resolves to a policy that never retries, so a failed
+    // request surfaces instead of being re-issued; on adopts the adapter's
+    // normal five-retry default.
+    const routeRetryPolicy = retryPolicy !== undefined
+      ? resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`)
+      : source.retryOnFailure === true
+        ? resolveRetryPolicy(undefined, `llm-pi-ai: provider "${provider}" retryPolicy`)
+        : resolveRetryPolicy({ mode: 'normal', maxRetries: 0 }, `llm-pi-ai: provider "${provider}" retryPolicy`)
     resolved.set(provider, {
       ...rest,
       provider,
@@ -518,7 +536,7 @@ export function resolveProfiles(
       maxRequestImageBytes,
       requestImagePixelBudget,
       requestImageMaxBytes,
-      retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
+      retryPolicy: routeRetryPolicy,
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),

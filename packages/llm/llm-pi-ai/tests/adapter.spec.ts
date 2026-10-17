@@ -477,11 +477,13 @@ describe('provider profile lifecycle', () => {
           },
         },
         anthropic: {},
+        'gw-retry': { retryOnFailure: true },
       },
     })
     expect(ctx.llm.listProviders()).toEqual([
       { id: 'openai', name: 'openai' },
       { id: 'anthropic', name: 'anthropic' },
+      { id: 'gw-retry', name: 'gw-retry' },
     ])
     expect(ctx.llm.providerRetryPolicy('openai')).toEqual({
       mode: 'always',
@@ -489,7 +491,15 @@ describe('provider profile lifecycle', () => {
       maxDelayMs: 100,
       jitterRatio: 0.2,
     })
+    // A profile that neither names a policy nor opts into `retryOnFailure`
+    // reports failures instead of re-issuing them: the curated switch defaults
+    // to off and the resolved policy carries the zero-retry shape.
     expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchObject({
+      mode: 'normal',
+      maxRetries: 0,
+    })
+    // The switch restores the adapter's normal five-retry default.
+    expect(ctx.llm.providerRetryPolicy('gw-retry')).toMatchObject({
       mode: 'normal',
       maxRetries: 5,
     })

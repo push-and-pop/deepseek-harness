@@ -7,10 +7,12 @@
  * a key is entered; a blank key materializes a reference-free profile for
  * provider-native authentication);
  * the collapsed 自定义设置 area carries the per-family extras (`baseURL` for
- * both families, DeepSeek's id/name/context-window model catalog, and the
- * display name and wire protocol of a pi-ai route the adapter does not ship —
- * the two fields the create card asked that route for, editable here for the
- * same reason).
+ * both families, the route-level User-Agent and custom headers, and — on a
+ * pi-ai route only — the per-route switch that decides whether a failed
+ * request continues on this gateway, plus DeepSeek's id/name/context-window
+ * model catalog and the display name and wire protocol of a pi-ai route the
+ * adapter does not ship — the two fields the create card asked that route
+ * for, editable here for the same reason).
  * Reasoning effort is deliberately absent: it is a per-MODEL capability, and
  * the models under one provider disagree about it, so a provider-scoped
  * control can only be set to a value some of them reject. The composer's
@@ -226,6 +228,14 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     setDraft(current => value === undefined
       ? schema.deletePath(current, [key])
       : schema.setPath(current, [key], value))
+  }
+  /**
+   * Write a boolean profile switch. The chosen value is always written rather
+   * than cleared when off, because a `false` the user chose must win over a
+   * `true` a layer beneath pins.
+   */
+  const setFlag = (key: string, on: boolean): void => {
+    setDraft(current => schema.setPath(current, [key], on))
   }
   const parsedHeaders = parseHeaderLines(headersText)
   const headersInvalid = parsedHeaders === undefined
@@ -546,6 +556,26 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
               />
               <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
             </div>
+            {/* The per-route failure switch: a pi-ai profile field only, and
+                the one place the curated UI edits request recovery. */}
+            {family === 'pi-ai'
+              ? (
+                <div className={styles['field']}>
+                  <label className={styles['checkboxLabel']}>
+                    <input
+                      type="checkbox"
+                      checked={(schema.getPath(draft, ['retryOnFailure'])
+                        ?? schema.getPath(fallback, ['retryOnFailure'])) === true}
+                      aria-label={t('customRetryOnFailure')}
+                      disabled={disabled}
+                      onChange={(event) => { setFlag('retryOnFailure', event.target.checked) }}
+                    />
+                    <span>{t('customRetryOnFailure')}</span>
+                  </label>
+                  <p className={styles['advancedHint']}>{t('customRetryOnFailureHint')}</p>
+                </div>
+              )
+              : null}
             {/* Deployment-owned extras. Names either adapter owns — auth,
                 protocol, and attribution — win a collision and are dropped
                 from the effective request at resolve time. */}

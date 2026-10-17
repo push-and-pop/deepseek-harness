@@ -275,6 +275,29 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* A field whose control is a native checkbox: the label and the box share one
+   clickable row, and the hint sits beneath like every other curated field. */
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.checkboxLabel input {
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.checkboxLabel:has(input:disabled) {
+  cursor: default;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .helpButton {
   width: 16px;
   height: 16px;
