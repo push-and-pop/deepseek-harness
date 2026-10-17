@@ -99,6 +99,8 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
     try {
       const files = new RequestFiles(this.files, {
         baseURL: connection.baseURL, headers: auth.headers,
+        ...Object.keys(connection.headers).length === 0 ? {} : { deploymentHeaders: connection.headers },
+        ...connection.userAgent === undefined ? {} : { userAgent: connection.userAgent },
       },
       connection.filePolicy, connection.filesApiTimeoutMs, signal, activity)
       let inline = false
@@ -138,7 +140,9 @@ export class DeepSeekAdapter<C extends Connection = Connection> extends LlmAdapt
         const response = await fetch(`${messagesApiRoot(connection.baseURL)}/messages`, {
           method: 'POST', signal, body: extensions.payload, redirect: 'error',
           headers: {
+            ...connection.headers,
             ...attributionHeaders(),
+            ...connection.userAgent === undefined ? {} : { 'user-agent': connection.userAgent },
             'content-type': 'application/json', 'accept': 'text/event-stream',
             ...auth.headers,
             'anthropic-version': '2023-06-01',

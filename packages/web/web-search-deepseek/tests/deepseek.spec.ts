@@ -215,6 +215,44 @@ describe('DeepSeekSearchProvider request mapping', () => {
     expect(recordRequest.mock.invocationCallOrder[0]).toBeLessThan(fetchMock.mock.invocationCallOrder[0] ?? 0)
   })
 
+  it('sends configured headers beneath authentication, protocol, and attribution headers', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(searchResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    await searchProvider({
+      ...options,
+      userAgent: 'search-agent/1.0',
+      headers: {
+        'x-tenant': 'acme',
+        'X-Api-Key': 'spoofed',
+        'user-agent': 'spoofed',
+        'anthropic-version': 'spoofed',
+        'content-type': 'text/plain',
+      },
+    }).search({ query: 'q' })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const headers = init.headers as Record<string, string>
+
+    expect(headers['x-tenant']).toBe('acme')
+    expect(headers['x-api-key']).toBe('ds-key')
+    expect(headers['user-agent']).toBe('search-agent/1.0')
+    expect(headers['anthropic-version']).toBe('2023-06-01')
+    expect(headers['content-type']).toBe('application/json')
+  })
+
+  it('rejects an unusable configured header before dispatch', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(searchResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await rejectedWebError(searchProvider({
+      ...options,
+      headers: { 'bad header': 'x' },
+    }).search({ query: 'q' }))
+
+    expect(error).toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    expect(error.message).toContain('bad header')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('forwards the abort signal', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(searchResponse()))
     vi.stubGlobal('fetch', fetchMock)
@@ -648,6 +686,20 @@ describe('web-search-deepseek plugin registration', () => {
     await ctx.web.search({ query: 'q' })
     const headers = fetchMock.mock.calls.map(([, init]) => (init as RequestInit).headers as Record<string, string>)
     expect(headers.map(value => value['user-agent'])).toEqual(['custom-agent/2.0', 'edited-agent/3.0'])
+    await ctx.fiber.dispose()
+  })
+
+  it('applies a live custom-header edit to the next search without re-registering', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(searchResponse()))
+    vi.stubGlobal('fetch', fetchMock)
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { searchProvider: DEEPSEEK_PROVIDER_ID })
+    const live = await liveConfig(ctx, deepseekPlugin, { apiKey: 'ds-key', headers: { 'X-Tenant': 'acme' } })
+    await ctx.web.search({ query: 'q' })
+    await live.update({ headers: { 'X-Tenant': 'beta' } })
+    await ctx.web.search({ query: 'q' })
+    const headers = fetchMock.mock.calls.map(([, init]) => new Headers((init as RequestInit).headers).get('x-tenant'))
+    expect(headers).toEqual(['acme', 'beta'])
     await ctx.fiber.dispose()
   })
 

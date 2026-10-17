@@ -52,6 +52,17 @@ export interface Config {
   fileQuotaCleanupBatch: Volatile<number>
   /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
   retryPolicy: Volatile<RetryPolicyConfig | undefined>
+  /**
+   * `User-Agent` every request from this route sends; omission keeps the
+   * Harness product identity.
+   */
+  userAgent: Volatile<string | undefined>
+  /**
+   * Extra headers sent on every request: Messages, Files API, and the model
+   * listing. Authentication, protocol, and attribution names are reserved:
+   * a same-named entry here is ignored.
+   */
+  headers: Volatile<Record<string, string> | undefined>
 }
 
 /** Plain options accepted by the provider resolver. */
@@ -107,6 +118,8 @@ export const deepSeekConfigFields = {
   fileRefreshMarginSeconds: z.number().step(1).min(0).default(DEFAULT_FILE_REFRESH_MARGIN_SECONDS).volatile(),
   fileQuotaCleanupBatch: z.number().step(1).min(1).max(1_000).default(DEFAULT_FILE_QUOTA_CLEANUP_BATCH).volatile(),
   retryPolicy: RetryPolicySchema.volatile(),
+  userAgent: z.string().volatile(),
+  headers: z.dict(z.string()).volatile(),
 }
 
 export const Config = z.object(deepSeekConfigFields)
@@ -196,6 +209,53 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
         : {},
     }
   })
+}
+
+/** Header names every DeepSeek request sets itself; a configured entry here never replaces one. */
+const RESERVED_HEADERS = new Set([
+  'authorization', 'x-api-key', 'x-dsh-auth-token',
+  'content-type', 'accept', 'anthropic-version', 'anthropic-beta',
+  'user-agent',
+  'x-deepseek-harness-user-id', 'x-deepseek-harness-session-id', 'x-deepseek-harness-compact',
+])
+
+/**
+ * Resolve the route's `User-Agent` override, treating a blank value as unset.
+ * @param userAgent - configured value.
+ * @returns the header value to send, or undefined to keep attribution.
+ * @throws Error when the value is not representable as one Fetch header.
+ */
+function resolveUserAgent(userAgent: string | undefined): string | undefined {
+  if (userAgent === undefined || userAgent.trim() === '') return undefined
+  try {
+    new Headers([['user-agent', userAgent]])
+  } catch {
+    throw new Error('llm-deepseek: userAgent is not valid for Fetch; use a single-line value representable as bytes')
+  }
+  return userAgent
+}
+
+/**
+ * Validate deployment headers and drop the names the adapter owns.
+ * @param headers - configured extra headers.
+ * @returns the entries to merge beneath the adapter's own headers, empty when unset.
+ * @throws Error when a name or value is not representable as one Fetch header.
+ */
+function resolveDeploymentHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const resolved: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    try {
+      new Headers([[name, value]])
+    } catch {
+      throw new Error(
+        `llm-deepseek: headers entry "${name}" is not valid for Fetch; use a single-line value representable as bytes`,
+      )
+    }
+    if (!RESERVED_HEADERS.has(name.toLowerCase())) resolved[name] = value
+  }
+  return resolved
 }
 
 /**
@@ -302,6 +362,8 @@ export function resolveAdapterOptions(config: Options, environment?: LaunchEnvir
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error('llm-deepseek: Messages baseURL must be an HTTP(S) root without credentials, query, or fragment')
   }
+  const userAgent = resolveUserAgent(config.userAgent)
+  const headers = resolveDeploymentHeaders(config.headers)
   return {
     baseURL,
     defaults: {
@@ -325,5 +387,7 @@ export function resolveAdapterOptions(config: Options, environment?: LaunchEnvir
       quotaCleanupBatch: fileQuotaCleanupBatch,
     },
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-deepseek: retryPolicy'),
+    ...userAgent === undefined ? {} : { userAgent },
+    headers,
   }
 }

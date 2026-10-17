@@ -4418,6 +4418,11 @@ export interface Config {
   maxUses: Volatile<number>
   /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
   userAgent: Volatile<string>
+  /**
+   * Extra headers sent on every search. Authentication, protocol, and
+   * attribution names are reserved: a same-named entry here is ignored.
+   */
+  headers: Volatile<Record<string, string> | undefined>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-web-search-deepseek -->

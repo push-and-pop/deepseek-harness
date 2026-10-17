@@ -9,6 +9,7 @@ import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { ModelsSection, providerCopy } from '../src/client/ModelsSection.tsx'
 import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/ModelsSection.tsx'
+import { ProviderEditor } from '../src/client/ProviderEditor.tsx'
 import { CustomProviderCard } from '../src/client/CustomProviderCard.tsx'
 import { formatCapacity, parseCapacity } from '../src/client/DeepSeekModelsEditor.tsx'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
@@ -1707,5 +1708,81 @@ describe('API key field', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
     await waitFor(() => { expect(load).toHaveBeenCalledOnce() })
     expect(screen.queryByRole('textbox', { name: en.customRoute })).toBeNull()
+  })
+})
+
+describe('deepseek provider headers', () => {
+  /** The protocol section shape the DeepSeek adapter serves to this page. */
+  const DeepSeekConfig = Schema.object({
+    baseURL: Schema.string(),
+    userAgent: Schema.string(),
+    headers: Schema.dict(Schema.string()),
+    apiKeyEnv: Schema.string().role('credential-ref'),
+    models: Schema.array(Schema.object({ id: Schema.string().required() })),
+  })
+
+  function mountEditor(config: Record<string, JsonValue> = {}) {
+    const namespace: SettingsNamespaceView = {
+      ns: 'llm-deepseek',
+      schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as JsonValue,
+      value: config,
+      base: {},
+      user: config,
+      autoGenerate: true,
+      applies: 'live',
+      secrets: [],
+      revision: 5,
+    }
+    const mutate = vi.fn(() => Promise.resolve(remoteOk(namespace)))
+    const face = {
+      llm: {
+        listProviders: vi.fn(() => Promise.resolve(ok([]))),
+        listConfigurableProviders: vi.fn(() => Promise.resolve(ok([]))),
+        discoverModels: vi.fn(() => Promise.resolve(ok([]))),
+      },
+      settings: { describe: vi.fn(), mutate },
+      credentials: { set: vi.fn(() => Promise.resolve(remoteOk(undefined))) },
+    }
+    const onClose = vi.fn()
+    render(
+      <ProviderEditor
+        provider="deepseek-official"
+        displayName="DeepSeek"
+        namespace={namespace}
+        schema={settingsSchema}
+        settingsPath={[]}
+        operations={operationsWith(face)}
+        t={t}
+        readOnly={false}
+        onClose={onClose}
+      />,
+    )
+    fireEvent.click(screen.getByText(en.customized))
+    return { mutate, onClose }
+  }
+
+  it('writes the User-Agent and Name: value header lines with the profile', async () => {
+    const { mutate, onClose } = mountEditor()
+
+    fireEvent.change(screen.getByLabelText(en.customUserAgent), { target: { value: 'acme-agent/2.0' } })
+    fireEvent.change(screen.getByLabelText(en.customHeaders), { target: { value: 'X-Tenant: acme\nX-Trace: on' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    expect(firstMutate(mutate).ns).toBe('llm-deepseek')
+    expect(firstMutate(mutate).ops).toEqual([
+      { op: 'set', path: ['userAgent'], value: 'acme-agent/2.0' },
+      { op: 'set', path: ['headers'], value: { 'X-Tenant': 'acme', 'X-Trace': 'on' } },
+    ])
+  })
+
+  it('refuses to apply a malformed header line', () => {
+    const { mutate } = mountEditor()
+
+    fireEvent.change(screen.getByLabelText(en.customHeaders), { target: { value: 'not-a-header' } })
+
+    expect(screen.getByText(en.customHeadersInvalid)).toBeTruthy()
+    expect(buttonNamed(en.apply).disabled).toBe(true)
+    expect(mutate).not.toHaveBeenCalled()
   })
 })

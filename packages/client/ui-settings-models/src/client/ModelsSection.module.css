@@ -677,6 +677,16 @@ select.input {
   cursor: default;
 }
 
+.textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 6px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  resize: vertical;
+}
+
 .keyInput {
   position: relative;
 }

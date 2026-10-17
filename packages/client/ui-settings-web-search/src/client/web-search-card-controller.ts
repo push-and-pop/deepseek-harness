@@ -14,7 +14,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
-  SettingsFormModel, settingsNumberField, settingsTextField,
+  SettingsFormModel, settingsHeadersField, settingsNumberField, settingsTextField,
   type SettingsFieldState, type SettingsFormActions, type SettingsFormShell, type SettingsFormScope, type SettingsFormScopeSnapshot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 
@@ -40,6 +40,8 @@ export interface WebSearchSettings {
   maxUses?: number
   /** Attribution `User-Agent` header; blank inherits the provider default. */
   userAgent?: string
+  /** Extra request headers; blank inherits none. */
+  headers?: Record<string, string>
 }
 
 /** What the credentials domain last reported, and for which reference. */
@@ -60,6 +62,8 @@ export interface WebSearchCardState extends SettingsFormShell {
   maxUses: SettingsFieldState
   /** The staged attribution `User-Agent`. */
   userAgent: SettingsFieldState
+  /** The staged extra request headers, one `Name: value` per line. */
+  headers: SettingsFieldState
   /** The staged credential, which starts blank on every load. */
   apiKey: SettingsFieldState
   /** Whether the Host reports a credential configured for the referenced key. */
@@ -94,7 +98,7 @@ export class WebSearchCardController {
   ) {
     this.form = new SettingsFormModel(
       scope,
-      [settingsTextField('baseURL'), settingsNumberField('maxUses'), settingsTextField('userAgent')],
+      [settingsTextField('baseURL'), settingsNumberField('maxUses'), settingsTextField('userAgent'), settingsHeadersField('headers')],
       [{ field: API_KEY_FIELD, write: text => this.writeKey(text) }],
     )
     this.store = this.form.bind(() => this.projection())
@@ -108,6 +112,7 @@ export class WebSearchCardController {
       baseURL: this.form.field('baseURL'),
       maxUses: this.form.field('maxUses'),
       userAgent: this.form.field('userAgent'),
+      headers: this.form.field('headers'),
       apiKey: this.form.field(API_KEY_FIELD),
       apiKeyConfigured: this.credential.configured,
       apiKeyWritable: this.credential.writable,

@@ -126,6 +126,16 @@
   cursor: default;
 }
 
+.textarea {
+  height: auto;
+  min-height: 76px;
+  padding: 8px 12px;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
 .input[aria-invalid='true'] {
   border-color: var(--dsw-alias-state-error-primary);
 }

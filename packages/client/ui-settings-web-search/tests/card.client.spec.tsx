@@ -33,6 +33,7 @@ describe('WebSearchCard', () => {
       baseURL: field(''),
       maxUses: field('5'),
       userAgent: field(''),
+      headers: field(''),
       apiKey: field(''),
       apiKeyConfigured: false,
       apiKeyWritable: true,
@@ -46,7 +47,7 @@ describe('WebSearchCard', () => {
 
   it('renders its one-liner alone in the summary view', () => {
     const store = createSnapshotStore<WebSearchCardState>({
-      ...settled, baseURL: field(''), maxUses: field('5'), userAgent: field(''), apiKey: field(''), apiKeyConfigured: false, apiKeyWritable: true,
+      ...settled, baseURL: field(''), maxUses: field('5'), userAgent: field(''), headers: field(''), apiKey: field(''), apiKeyConfigured: false, apiKeyWritable: true,
     })
     const props = { ...cardActions(), view: 'summary', t, useWebSearchCard: bindSnapshotSelector(store) } as WebSearchCardProps
     render(<WebSearchCard {...props} />)
@@ -83,26 +84,29 @@ describe('WebSearchCard', () => {
     expect(screen.getByLabelText(en.baseUrl)).toHaveProperty('disabled', false)
   })
 
-  it('stages the endpoint, the search budget, the agent, and their resets', () => {
+  it('stages the endpoint, the search budget, the agent, the headers, and their resets', () => {
     const actions = renderWebSearch({
       baseURL: field('https://search.test/v1', { overridden: true }),
       maxUses: field('3', { overridden: true }),
       userAgent: field('search-agent/1.0', { overridden: true }),
+      headers: field('X-Tenant: acme', { overridden: true }),
     })
 
     fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://other.test' } })
     fireEvent.change(screen.getByLabelText(en.maxUses), { target: { value: '4' } })
     fireEvent.change(screen.getByLabelText(en.userAgent), { target: { value: 'search-agent/2.0' } })
+    fireEvent.change(screen.getByLabelText(en.headers), { target: { value: 'X-Tenant: beta' } })
     const resets = screen.getAllByRole('button', { name: en.reset })
-    expect(resets).toHaveLength(3)
+    expect(resets).toHaveLength(4)
     for (const reset of resets) fireEvent.click(reset)
 
     expect(actions.edit.mock.calls).toEqual([
       ['baseURL', 'https://other.test'],
       ['maxUses', '4'],
       ['userAgent', 'search-agent/2.0'],
+      ['headers', 'X-Tenant: beta'],
     ])
-    expect(actions.resetField.mock.calls).toEqual([['baseURL'], ['maxUses'], ['userAgent']])
+    expect(actions.resetField.mock.calls).toEqual([['baseURL'], ['maxUses'], ['userAgent'], ['headers']])
   })
 })
 

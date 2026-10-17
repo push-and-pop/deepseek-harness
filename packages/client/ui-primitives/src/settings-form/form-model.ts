@@ -14,6 +14,7 @@
  */
 
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { formatHeaderLines, parseHeaderLines } from './header-lines.ts'
 
 /** What the model reads of one Host entry's form. */
 export interface SettingsFormScopeSnapshot<T> {
@@ -181,6 +182,25 @@ export function settingsTextField(field: string): SettingsFieldSpec {
     parse: (text) => {
       const trimmed = text.trim()
       return trimmed === '' ? { kind: 'clear' } : { kind: 'set', value: trimmed }
+    },
+  }
+}
+
+/**
+ * A request-header dictionary written as one `Name: value` line per entry. An
+ * empty draft clears the field; a line that is not a usable header blocks the
+ * save instead of dropping what the user typed.
+ * @param field - field name inside the namespace section.
+ * @returns the field's conversion spec.
+ */
+export function settingsHeadersField(field: string): SettingsFieldSpec {
+  return {
+    field,
+    format: value => formatHeaderLines(value),
+    parse: (text) => {
+      const headers = parseHeaderLines(text)
+      if (headers === undefined) return undefined
+      return Object.keys(headers).length === 0 ? { kind: 'clear' } : { kind: 'set', value: headers }
     },
   }
 }

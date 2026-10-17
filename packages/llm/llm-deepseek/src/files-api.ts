@@ -72,6 +72,10 @@ interface FilesApiOptions {
   baseURL: string
   /** Provider-resolved authentication headers for this endpoint. */
   headers: Readonly<Record<string, string>>
+  /** Deployment headers sent alongside authentication; reserved names are already absent. */
+  deploymentHeaders?: Readonly<Record<string, string>>
+  /** Route `User-Agent`, replacing the attribution value when set. */
+  userAgent?: string
   fetch?: typeof fetch
 }
 
@@ -131,13 +135,17 @@ function providerErrorDetail(value: unknown): { message?: string; detail: string
 export class DeepSeekFilesClient {
   private readonly baseURL: string
   private readonly authHeaders: Readonly<Record<string, string>>
+  private readonly deploymentHeaders: Readonly<Record<string, string>>
+  private readonly userAgent: string | undefined
   private readonly fetchImpl: typeof fetch
 
   /**
-   * @param options - endpoint, authentication headers, and optional test transport.
+   * @param options - endpoint, authentication headers, deployment headers, and optional test transport.
    */
   constructor(options: FilesApiOptions) {
     this.authHeaders = options.headers
+    this.deploymentHeaders = options.deploymentHeaders ?? {}
+    this.userAgent = options.userAgent
     this.fetchImpl = options.fetch ?? globalThis.fetch
     this.baseURL = messagesApiRoot(options.baseURL)
   }
@@ -146,6 +154,8 @@ export class DeepSeekFilesClient {
     let response: Response
     try {
       const headers = new Headers(attributionHeaders())
+      for (const [name, value] of Object.entries(this.deploymentHeaders)) headers.set(name, value)
+      if (this.userAgent !== undefined) headers.set('user-agent', this.userAgent)
       for (const [name, value] of Object.entries(this.authHeaders)) headers.set(name, value)
       headers.set('anthropic-version', '2023-06-01')
       headers.set('anthropic-beta', MESSAGES_FILES_BETA)

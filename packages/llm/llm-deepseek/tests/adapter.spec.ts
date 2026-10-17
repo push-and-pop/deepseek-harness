@@ -147,6 +147,31 @@ describe('direct Messages HTTP', () => {
     expect(llm.imageRequestPricing('deepseek-official', MODEL)).toBeDefined()
   })
 
+  it('sends configured deployment headers and a route User-Agent, keeping reserved names owned by the adapter', async () => {
+    const http = await endpoint()
+    const llm = adapter({
+      baseURL: http.url,
+      userAgent: 'acme-agent/2.0',
+      headers: {
+        'x-tenant': 'acme',
+        'X-Api-Key': 'spoofed',
+        'User-Agent': 'spoofed',
+        'x-deepseek-harness-user-id': 'spoofed',
+        'content-type': 'text/plain',
+      },
+    })
+    await assemble(llm.stream(options({ sessionId: SessionId('session-test') })))
+
+    expect(http.requests[0]?.headers).toMatchObject({
+      'x-tenant': 'acme',
+      'user-agent': 'acme-agent/2.0',
+      'x-api-key': 'test-key',
+      'content-type': 'application/json',
+      'x-deepseek-harness-user-id': 'test-user',
+      'x-deepseek-harness-session-id': 'session-test',
+    })
+  })
+
   it.each([
     ['https://provider.example', 'https://provider.example/v1/messages'],
     ['https://provider.example/v1/', 'https://provider.example/v1/messages'],
@@ -600,6 +625,13 @@ describe('Cordis provider composition', () => {
 
 it('rejects invalid catalog context windows at the options resolver', () => {
   expect(() => Messages.resolveAdapterOptions({ models: [{ id: 'invalid-window', contextWindow: 0 }] })).toThrow('contextWindow must be a positive integer')
+})
+
+it('rejects headers and User-Agent values Fetch cannot send', () => {
+  expect(() => Messages.resolveAdapterOptions({ headers: { 'bad header': 'x' } }))
+    .toThrow('headers entry "bad header" is not valid for Fetch')
+  expect(() => Messages.resolveAdapterOptions({ userAgent: 'bad\nagent' }))
+    .toThrow('userAgent is not valid for Fetch')
 })
 
 

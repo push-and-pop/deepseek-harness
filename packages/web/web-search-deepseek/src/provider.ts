@@ -110,6 +110,12 @@ export interface DeepSeekSearchProviderOptions {
   /** Attribution `User-Agent` header; defaults to {@link DEEPSEEK_DEFAULT_USER_AGENT}. */
   userAgent?: string
   /**
+   * Extra request headers. Names the provider owns — authentication,
+   * protocol, and attribution — win collisions and a same-named entry here is
+   * ignored.
+   */
+  headers?: Readonly<Record<string, string>>
+  /**
    * Record the exact secret-free request immediately before dispatch. A throw
    * prevents dispatch so model-visible auxiliary input cannot escape logging.
    */
@@ -188,6 +194,34 @@ interface SearchAuth {
   readonly headers: Readonly<Record<string, string>>
 }
 
+/** Names the provider owns on every search; a configured `headers` entry never replaces one. */
+const RESERVED_HEADERS = new Set([
+  'authorization', 'x-api-key', 'x-dsh-auth-token',
+  'anthropic-version', 'content-type', 'accept', 'user-agent',
+])
+
+/**
+ * Validate configured headers and drop the names the provider owns.
+ * @param headers - configured extra headers.
+ * @returns the entries to merge beneath the provider's own headers.
+ * @throws WebError when a name or value Fetch cannot put on a request.
+ */
+function deploymentHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+  const deployment: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    try {
+      new Headers([[name, value]])
+    } catch {
+      throw new WebError(
+        `DeepSeek search header "${name}" is not valid for Fetch; use a single-line value representable as bytes`,
+        'WEB_PROVIDER_ERROR',
+      )
+    }
+    if (!RESERVED_HEADERS.has(name.toLowerCase())) deployment[name] = value
+  }
+  return deployment
+}
+
 /**
  * The DeepSeek-backed search provider. HTTP redirects fail as `WEB_PROVIDER_ERROR`;
  * failures after dispatch name the endpoint and tell the model how the user can configure it.
@@ -235,12 +269,14 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       body,
     })
     throwIfSearchAborted(signal)
+    const deployment = deploymentHeaders(options.headers)
     let response: Response
     try {
       response = await fetch(endpoint, {
         method: 'POST',
         redirect: 'error',
         headers: {
+          ...deployment,
           ...auth.headers,
           'anthropic-version': options.apiVersion,
           'content-type': 'application/json',

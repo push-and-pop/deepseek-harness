@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
-  SettingsFormModel, settingsNumberField, settingsTextField,
+  SettingsFormModel, settingsHeadersField, settingsNumberField, settingsTextField,
   type SettingsFormPathOp, type SettingsFormScope, type SettingsFormScopeSnapshot,
 } from '../src/index.ts'
 
@@ -315,5 +315,42 @@ describe('SettingsFormModel', () => {
     host.publish({ status: 'unavailable' })
 
     expect(subject.shell()).toMatchObject({ available: false, writable: false })
+  })
+
+  it('stages a header dictionary as one Name: value line per entry', async () => {
+    const host = stubScope<Record<string, unknown>>()
+    const subject = new SettingsFormModel(host.scope, [settingsHeadersField('headers')])
+    acceptWrites(host)
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { headers: { 'X-Tenant': 'acme', 'X-Trace': 'on' } },
+      base: {},
+      user: {},
+    })
+
+    expect(subject.field('headers').text).toBe('X-Tenant: acme\nX-Trace: on')
+
+    subject.actions().edit('headers', 'X-Tenant: beta\nX-Trace: off')
+    await subject.save()
+
+    expect(host.mutate.mock.calls[0]![0])
+      .toEqual([{ op: 'set', path: ['headers'], value: { 'X-Tenant': 'beta', 'X-Trace': 'off' } }])
+  })
+
+  it('blocks a malformed header draft and clears the field when emptied', async () => {
+    const host = stubScope<Record<string, unknown>>()
+    const subject = new SettingsFormModel(host.scope, [settingsHeadersField('headers')])
+    acceptWrites(host)
+    host.publish({ status: 'ready', writable: true, value: { headers: { 'X-Tenant': 'acme' } }, base: {}, user: { headers: { 'X-Tenant': 'acme' } } })
+
+    subject.actions().edit('headers', 'not-a-header')
+    expect(subject.field('headers')).toMatchObject({ invalid: true, overridden: false })
+    await subject.save()
+    expect(host.mutate).not.toHaveBeenCalled()
+
+    subject.actions().edit('headers', '   ')
+    await subject.save()
+    expect(host.mutate.mock.calls[0]![0]).toEqual([{ op: 'unset', path: ['headers'] }])
   })
 })

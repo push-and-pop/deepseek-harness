@@ -79,6 +79,10 @@ export interface DeepSeekConnectionOptions {
   filePolicy: DeepSeekFilePolicy
   /** Provider-owned model-request retry policy, already resolved. */
   retryPolicy: ResolvedRetryPolicy
+  /** Route `User-Agent`; omission keeps the Harness attribution identity. */
+  userAgent?: string
+  /** Deployment headers, already stripped of names the adapter reserves. */
+  headers: Readonly<Record<string, string>>
 }
 
 /** Authentication captured by the provider for one request and its file operations. */

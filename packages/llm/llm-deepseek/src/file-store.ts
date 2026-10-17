@@ -24,6 +24,10 @@ export interface DeepSeekFileConnection {
   baseURL: string
   /** Provider-resolved authentication headers for this endpoint. */
   headers: Readonly<Record<string, string>>
+  /** Deployment headers sent alongside authentication headers; reserved names are already absent. */
+  deploymentHeaders?: Readonly<Record<string, string>>
+  /** Route `User-Agent`, replacing the attribution value when set. */
+  userAgent?: string
 }
 
 /** Result of one file-id resolution. */
@@ -137,6 +141,8 @@ export class DeepSeekFileStore {
     return new DeepSeekFilesClient({
       baseURL: connection.baseURL,
       headers: connection.headers,
+      ...connection.deploymentHeaders === undefined ? {} : { deploymentHeaders: connection.deploymentHeaders },
+      ...connection.userAgent === undefined ? {} : { userAgent: connection.userAgent },
       ...this.fetchImpl === undefined ? {} : { fetch: this.fetchImpl },
     })
   }

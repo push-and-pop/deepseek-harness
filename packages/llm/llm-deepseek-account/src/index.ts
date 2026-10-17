@@ -73,7 +73,14 @@ export function apply(ctx: Context, config: Config): void {
   const catalog = new AccountModelCatalog({
     settings: () => settings().catalog,
     token: async url => account()?.resolveToken(url),
-    load: (url, token, signal) => requestModelListing(url, { [TOKEN_HEADER]: token }, signal),
+    load: (url, token, signal) => {
+      const protocol = settings().protocol
+      return requestModelListing(url, {
+        ...protocol.headers,
+        ...protocol.userAgent === undefined ? {} : { 'user-agent': protocol.userAgent },
+        [TOKEN_HEADER]: token,
+      }, signal)
+    },
     now: () => Date.now(),
     info: (message) => { console.info(LOG_TAG, message) },
     warn: (message) => { console.warn(LOG_TAG, message) },

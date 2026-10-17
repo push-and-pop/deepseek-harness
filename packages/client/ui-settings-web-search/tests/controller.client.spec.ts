@@ -212,6 +212,26 @@ describe('WebSearchCardController', () => {
     expect(host.mutate.mock.calls.map(([ops]) => ops)).toEqual([[['baseURL', 'https://other.test'], ['maxUses', 3]].map(([field, value]) => ({ op: 'set', path: [field], value }))])
     expect(credentials.set).not.toHaveBeenCalled()
   })
+
+  it('stages request headers as Name: value lines and refuses a malformed draft', async () => {
+    const host = stubConfigForm<WebSearchSettings>()
+    acceptWrites(host)
+    const credentials = credentialsApi(true)
+    const controller = new WebSearchCardController(host.scope, credentials.ctx)
+    host.publish({ status: 'ready', writable: true, value: {}, base: {}, user: {} })
+    const face = controller.inject()
+
+    face.edit('headers', 'X-Tenant: acme\nX-Trace: on')
+    face.save()
+    await vi.waitFor(() => { expect(host.mutate).toHaveBeenCalledTimes(1) })
+    expect(host.mutate.mock.calls[0]![0])
+      .toEqual([{ op: 'set', path: ['headers'], value: { 'X-Tenant': 'acme', 'X-Trace': 'on' } }])
+
+    face.edit('headers', 'not-a-header')
+    expect(face.hooks.webSearchCard.getSnapshot()).toMatchObject({ dirty: true, invalid: true })
+    face.save()
+    expect(host.mutate).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('WebFetchCardController', () => {

@@ -80,6 +80,17 @@ describe('SettingsValueField', () => {
     expect(screen.getByLabelText('Command timeout')).toHaveProperty('disabled', true)
     expect(screen.getByRole('button', { name: 'Reset to default' })).toHaveProperty('disabled', true)
   })
+
+  it('renders a textarea for a multiline draft and stages its edits', () => {
+    const onEdit = vi.fn()
+    render(<SettingsValueField {...frame} multiline text={'X-Tenant: acme\nX-Trace: on'} onEdit={onEdit} onReset={vi.fn()} />)
+
+    const control = screen.getByLabelText('Command timeout')
+    expect(control.tagName).toBe('TEXTAREA')
+    expect(control).toHaveProperty('value', 'X-Tenant: acme\nX-Trace: on')
+    fireEvent.change(control, { target: { value: 'X-Tenant: beta' } })
+    expect(onEdit).toHaveBeenCalledWith('X-Tenant: beta')
+  })
 })
 
 describe('SettingsSecretField', () => {

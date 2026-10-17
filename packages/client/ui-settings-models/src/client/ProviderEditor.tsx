@@ -25,7 +25,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CredentialInfo, LlmNativeAuth, SettingsNamespaceView, SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Tooltip, formatHeaderLines, parseHeaderLines } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
@@ -179,6 +179,12 @@ function refFor(
 export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const { namespace, schema, settingsPath, operations, t } = props
   const [draft, setDraft] = useState<Record<string, unknown>>(() => draftAt(schema, namespace, settingsPath))
+  // The header field is the one draft that has an intermediate, not-yet-valid
+  // text form; it keeps the typed text here and writes the draft only once a
+  // parse succeeds, so an unfinished line is never silently discarded.
+  const [headersText, setHeadersText] = useState(
+    () => formatHeaderLines(schema.getPath(draftAt(schema, namespace, settingsPath), ['headers'])),
+  )
   const [keyDraft, setKeyDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [listBusy, setListBusy] = useState(false)
@@ -220,6 +226,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     setDraft(current => value === undefined
       ? schema.deletePath(current, [key])
       : schema.setPath(current, [key], value))
+  }
+  const parsedHeaders = parseHeaderLines(headersText)
+  const headersInvalid = parsedHeaders === undefined
+  const setHeaders = (text: string): void => {
+    setHeadersText(text)
+    const parsed = parseHeaderLines(text)
+    if (parsed === undefined) return
+    setDraft(current => Object.keys(parsed).length === 0
+      ? schema.deletePath(current, ['headers'])
+      : schema.setPath(current, ['headers'], parsed))
   }
 
   // The model list is validated by the same per-row checker for both families,
@@ -266,6 +282,9 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
    * outside the card. Ops name only the fields this card can see.
    */
   const applyOnce = async (): Promise<string | undefined> => {
+    // The footer disables submit while a line is malformed; this keeps the
+    // same refusal behind the only function that writes.
+    if (headersInvalid) return t('customHeadersInvalid')
     const ns = namespace.ns
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
@@ -511,26 +530,39 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                 </div>
               )
               : null}
-            {/* A route's own User-Agent is a pi-ai concern: both families'
-                model calls carry the product attribution by default, and only
-                a pi-ai route's profile has the per-route override field. */}
-            {family === 'pi-ai'
-              ? (
-                <div className={styles['field']}>
-                  <span className={styles['fieldLabel']}>{t('customUserAgent')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    value={stringAt(draft, 'userAgent') ?? ''}
-                    placeholder={t('customUserAgentPlaceholder')}
-                    aria-label={t('customUserAgent')}
-                    disabled={disabled}
-                    onChange={(event) => { setField('userAgent', event.target.value) }}
-                  />
-                  <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
-                </div>
-              )
-              : null}
+            {/* Both families send a route-level User-Agent: pi-ai's profile
+                has carried it since provider routes were introduced, and the
+                DeepSeek protocol reads it beside its custom headers. */}
+            <div className={styles['field']}>
+              <span className={styles['fieldLabel']}>{t('customUserAgent')}</span>
+              <input
+                className={styles['input']}
+                type="text"
+                value={stringAt(draft, 'userAgent') ?? ''}
+                placeholder={t('customUserAgentPlaceholder')}
+                aria-label={t('customUserAgent')}
+                disabled={disabled}
+                onChange={(event) => { setField('userAgent', event.target.value) }}
+              />
+              <p className={styles['advancedHint']}>{t('customUserAgentHint')}</p>
+            </div>
+            {/* Deployment-owned extras. Names either adapter owns — auth,
+                protocol, and attribution — win a collision and are dropped
+                from the effective request at resolve time. */}
+            <div className={styles['field']}>
+              <span className={styles['fieldLabel']}>{t('customHeaders')}</span>
+              <textarea
+                className={`${styles['input']} ${styles['textarea']}`}
+                rows={3}
+                value={headersText}
+                placeholder={t('customHeadersPlaceholder')}
+                aria-label={t('customHeaders')}
+                aria-invalid={headersInvalid}
+                disabled={disabled}
+                onChange={(event) => { setHeaders(event.target.value) }}
+              />
+              <p className={styles['advancedHint']}>{headersInvalid ? t('customHeadersInvalid') : t('customHeadersHint')}</p>
+            </div>
             {/* Both families edit the same rows through the same contract; only
                 the extras differ — DeepSeek's inherited capacities, pi-ai's
                 endpoint interrogation. */}
@@ -590,6 +622,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
+          || headersInvalid
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}

@@ -65,6 +65,11 @@ export interface Config {
   maxUses: Volatile<number>
   /** Attribution `User-Agent` header sent on every search. Defaults to the product agent. */
   userAgent: Volatile<string>
+  /**
+   * Extra headers sent on every search. Authentication, protocol, and
+   * attribution names are reserved: a same-named entry here is ignored.
+   */
+  headers: Volatile<Record<string, string> | undefined>
 }
 
 export const Config = z.object({
@@ -79,6 +84,7 @@ export const Config = z.object({
   maxTokens: z.number().step(1).min(1).default(DEEPSEEK_DEFAULT_MAX_TOKENS).volatile(),
   maxUses: z.number().step(1).min(1).default(DEEPSEEK_DEFAULT_MAX_USES).volatile(),
   userAgent: z.string().default(DEEPSEEK_DEFAULT_USER_AGENT).volatile(),
+  headers: z.dict(z.string()).volatile(),
 })
 
 /**
@@ -133,6 +139,7 @@ function resolveOptions(
     maxTokens: config.maxTokens,
     maxUses: config.maxUses,
     userAgent: config.userAgent,
+    ...config.headers === undefined ? {} : { headers: config.headers },
     recordRequest: (request) => {
       ctx.get('agents')?.currentInitiator()?.session.append(
         'web/deepseek-search-llm-request',
@@ -148,5 +155,6 @@ export function apply(ctx: Context, config: Config): void {
     apiKey: config.apiKey.get(), apiKeyEnv: config.apiKeyEnv.get(), baseURL: config.baseURL.get(), model: config.model.get(),
     apiVersion: config.apiVersion.get(), maxTokens: config.maxTokens.get(), maxUses: config.maxUses.get(),
     userAgent: config.userAgent.get(),
+    headers: config.headers.get(),
   })))
 }

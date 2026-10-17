@@ -79,6 +79,19 @@ export function WebSearchCard(props: WebSearchCardProps) {
         onEdit={(text) => { props.edit('userAgent', text) }}
         onReset={() => { props.resetField('userAgent') }}
       />
+      <SettingsValueField
+        id="plugin-config-web-search-headers"
+        label={t('headers')}
+        hint={t('headersHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('invalidHeader')}
+        multiline
+        disabled={disabled}
+        {...state.headers}
+        onEdit={(text) => { props.edit('headers', text) }}
+        onReset={() => { props.resetField('headers') }}
+      />
     </SettingsForm>
   )
 }

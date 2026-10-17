@@ -8,6 +8,7 @@ export type WebSearchSettingsLocaleKey =
   | 'apiKey' | 'apiKeyHint' | 'apiKeySet' | 'apiKeyUnset'
   | 'baseUrl' | 'baseUrlHint' | 'maxUses' | 'maxUsesHint'
   | 'userAgent' | 'userAgentHint'
+  | 'headers' | 'headersHint' | 'invalidHeader'
   | 'fetchTitle' | 'fetchDescription' | 'fetchUserAgentHint'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed' | 'invalidNumber'
@@ -26,6 +27,9 @@ export const en: Record<WebSearchSettingsLocaleKey, string> = {
   maxUsesHint: 'How many times one request may search before it must answer.',
   userAgent: 'User-Agent',
   userAgentHint: 'Sent on every search request. Leave blank to use the default.',
+  headers: 'Custom headers',
+  headersHint: 'One "Name: value" per line. Authentication, protocol, and attribution headers win same-named entries.',
+  invalidHeader: 'Each line must be "Name: value" with a name and value Fetch accepts.',
   fetchTitle: 'Web fetch',
   fetchDescription: 'Set the User-Agent of the anonymous page fetcher.',
   fetchUserAgentHint: 'Sent on every fetched page. Leave blank to use the default.',
@@ -53,6 +57,9 @@ export const zh: Record<WebSearchSettingsLocaleKey, string> = {
   maxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
   userAgent: 'User-Agent',
   userAgentHint: '每次搜索请求都会携带；留空使用默认值。',
+  headers: '自定义请求头',
+  headersHint: '每行一个 “Name: value”。认证、协议和归属请求头优先，同名条目会被忽略。',
+  invalidHeader: '每行需为 “Name: value”，且名称和值需能被 Fetch 接受。',
   fetchTitle: '网页抓取',
   fetchDescription: '设置匿名网页抓取的 User-Agent。',
   fetchUserAgentHint: '抓取的每个页面请求都会携带；留空使用默认值。',
