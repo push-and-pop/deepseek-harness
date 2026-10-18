@@ -159,11 +159,18 @@ export interface PiAiProviderProfile {
   /**
    * Keep a failed model request on this same gateway. `false` (the default)
    * keeps the adapter's normal policy: up to five retries with exponential
-   * backoff. `true` retries without backoff until the request succeeds or is
-   * cancelled. Each provider decides independently, and an explicit
-   * `retryPolicy` wins over this switch.
+   * backoff. `true` retries until the request succeeds or is cancelled,
+   * waiting {@link retryOnFailureDelayMs} between attempts. Each provider
+   * decides independently, and an explicit `retryPolicy` wins over this switch.
    */
   retryOnFailure?: boolean
+  /**
+   * Fixed wait in milliseconds between retries while {@link retryOnFailure}
+   * is on (default `0`: re-issue immediately). The Models page edits it as
+   * whole seconds beside that switch; an off switch ignores it, and an
+   * explicit `retryPolicy` wins over both.
+   */
+  retryOnFailureDelayMs?: number
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
@@ -351,6 +358,7 @@ const profile = z.object({
   headers: z.dict(z.string()),
   userAgent: z.string(),
   retryOnFailure: z.boolean().default(false),
+  retryOnFailureDelayMs: z.number().step(1).min(0).max(MAX_TIMER_DELAY_MS),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
   cacheRetention: z.union(['none', 'short', 'long']),
@@ -456,6 +464,16 @@ export function resolveProfiles(
     }
     assertValidHeaders(provider, source.headers)
     assertValidUserAgent(provider, source.userAgent)
+    // Read only with the switch below, and refused here rather than silently
+    // turning a mistyped wait back into an immediate retry loop.
+    const retryOnFailureDelayMs = source.retryOnFailureDelayMs ?? 0
+    if (!Number.isSafeInteger(retryOnFailureDelayMs)
+      || retryOnFailureDelayMs < 0
+      || retryOnFailureDelayMs > MAX_TIMER_DELAY_MS) {
+      throw new Error(
+        `llm-pi-ai: provider "${provider}" retryOnFailureDelayMs must be a non-negative safe integer no greater than ${MAX_TIMER_DELAY_MS}`,
+      )
+    }
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
@@ -521,14 +539,20 @@ export function resolveProfiles(
     // `retryOnFailure` is the curated on/off switch for the Models page; an
     // explicit `retryPolicy` stays the deployment escape hatch and wins. Off
     // (the default) keeps the adapter's long-standing five-retry backoff
-    // policy; on retries without backoff until the request succeeds or is
-    // cancelled. The policy schema refuses a zero delay, so the tightest one
-    // it accepts — one millisecond, no jitter — carries "no backoff".
+    // policy. On retries until the request succeeds or is cancelled, waiting
+    // `retryOnFailureDelayMs` between attempts. The policy schema refuses a
+    // zero delay, so the tightest one it accepts — one millisecond, no jitter —
+    // carries "immediately".
     const routeRetryPolicy = retryPolicy !== undefined
       ? resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`)
       : source.retryOnFailure === true
         ? resolveRetryPolicy(
-          { mode: 'always', backoff: { initialDelayMs: 1, maxDelayMs: 1, jitterRatio: 0 } },
+          {
+            mode: 'always',
+            backoff: retryOnFailureDelayMs > 0
+              ? { initialDelayMs: retryOnFailureDelayMs, maxDelayMs: retryOnFailureDelayMs, jitterRatio: 0 }
+              : { initialDelayMs: 1, maxDelayMs: 1, jitterRatio: 0 },
+          },
           `llm-pi-ai: provider "${provider}" retryPolicy`,
         )
         : resolveRetryPolicy(undefined, `llm-pi-ai: provider "${provider}" retryPolicy`)

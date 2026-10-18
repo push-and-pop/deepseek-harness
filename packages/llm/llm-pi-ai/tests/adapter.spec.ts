@@ -508,6 +508,28 @@ describe('provider profile lifecycle', () => {
     expect(ctx.llm.listProviders()).toEqual([])
   })
 
+  it('turns the failure switch wait into a fixed delay between retries', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { 'gw-wait': { retryOnFailure: true, retryOnFailureDelayMs: 2_500 } },
+    })
+    expect(ctx.llm.providerRetryPolicy('gw-wait')).toEqual({
+      mode: 'always',
+      initialDelayMs: 2_500,
+      maxDelayMs: 2_500,
+      jitterRatio: 0,
+    })
+  })
+
+  it('refuses a failure switch wait that is not a whole millisecond count', () => {
+    for (const retryOnFailureDelayMs of [-1, 1.5, Number.NaN, MAX_TIMER_DELAY_MS + 1]) {
+      expect(() => resolveProfiles({
+        openai: { retryOnFailure: true, retryOnFailureDelayMs },
+      })).toThrow(/retryOnFailureDelayMs/)
+    }
+  })
+
   it('exposes the installed pi-ai model catalog through provider-neutral metadata', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

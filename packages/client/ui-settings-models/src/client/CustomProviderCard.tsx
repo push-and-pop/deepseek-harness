@@ -111,6 +111,7 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   const [protocol, setProtocol] = useState(protocols[0] ?? '')
   const [userAgent, setUserAgent] = useState('')
   const [retryOnFailure, setRetryOnFailure] = useState(false)
+  const [retryDelay, setRetryDelay] = useState('')
   const [keyDraft, setKeyDraft] = useState('')
   const [models, setModels] = useState<readonly ModelDraft[]>([])
   const [busy, setBusy] = useState(false)
@@ -137,13 +138,20 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
   // this hand-declared route edits its reasoning levels, so they are checked too.
   const modelFailure = validateDeepSeekModels(models) ?? validateReasoningEfforts(models)
   const keyFailure = apiKeyFailure(keyDraft)
+  // The switch's wait edits whole seconds; a malformed value blocks the create
+  // rather than storing a delay the Host would refuse.
+  const retryDelayText = retryDelay.trim()
+  const retryDelayFailure = retryOnFailure && retryDelayText.length > 0
+    && (!/^\d+$/.test(retryDelayText) || !Number.isSafeInteger(Number(retryDelayText)))
+    ? 'customRetryOnFailureDelayInvalid' as const
+    : undefined
   // The typed key with paste whitespace removed. A blank field yields an empty
   // string, which the create path reads as "no key supplied" — a route may
   // legitimately authenticate through the provider's own ambient discovery.
   const keyValue = keyDraft.trim()
   const ready = route.length > 0 && !routeInvalid && !routeTaken
     && normalizedBaseURL.length > 0 && !baseUrlInvalid && models.length > 0 && modelFailure === undefined
-    && keyFailure === undefined
+    && keyFailure === undefined && retryDelayFailure === undefined
   // The one blocked gate worth a line under the form. A satisfied card says
   // nothing at all rather than printing an empty paragraph.
   const hint = failure !== undefined || ready
@@ -151,6 +159,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
     // blocked only by the key stays silent here rather than answering with the
     // next unmet gate — which is satisfied, and reads as a second, false fault.
     || keyFailure !== undefined
+    // The wait field prints its own failure beneath itself, like the key.
+    || retryDelayFailure !== undefined
     // Same for the route id, and it must be tested rather than assumed: the
     // fallback arm below reads "no models yet", so an unmet route gate would
     // fall through to it and contradict the filled-in list right above.
@@ -182,6 +192,11 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
         // Off is the product default, so only the switch that changes behavior
         // is written; the Host resolves the retry policy from it.
         ...retryOnFailure ? { retryOnFailure: true } : {},
+        // A zero wait is the product default and stays implicit; the Host
+        // resolves the fixed delay from the milliseconds it receives.
+        ...retryOnFailure && Number(retryDelayText) > 0
+          ? { retryOnFailureDelayMs: Number(retryDelayText) * 1000 }
+          : {},
         models: models.map(model => ({ ...model })),
       }
       // `taken` is a snapshot too, so the id check alone cannot see a route
@@ -326,6 +341,29 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
           <span>{t('customRetryOnFailure')}</span>
         </label>
         <p className={styles['advancedHint']}>{t('customRetryOnFailureHint')}</p>
+        {retryOnFailure
+          ? (
+            <div className={styles['retryDelayRow']}>
+              <span className={styles['fieldLabel']}>{t('customRetryOnFailureDelay')}</span>
+              <input
+                className={`${styles['input']} ${styles['retryDelayInput']}`}
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                value={retryDelay}
+                placeholder={t('customRetryOnFailureDelayPlaceholder')}
+                aria-label={t('customRetryOnFailureDelay')}
+                aria-invalid={retryDelayFailure !== undefined}
+                disabled={profileDisabled}
+                onChange={(event) => { setRetryDelay(event.target.value) }}
+              />
+            </div>
+          )
+          : null}
+        {retryDelayFailure === undefined
+          ? null
+          : <p className={styles['error']}>{t(retryDelayFailure)}</p>}
       </div>
       <ModelListEditor
         models={models}

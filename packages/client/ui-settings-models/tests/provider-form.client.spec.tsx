@@ -936,6 +936,89 @@ describe('hand-declared providers', () => {
     expect(set).toHaveBeenCalledWith('ACME_GATEWAY_API_KEY', 'gw-key')
   })
 
+  it('writes the failure switch wait with the new profile', async () => {
+    const { mutate, onClose } = mountCard()
+
+    fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme-gateway' } })
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://gateway.acme.example/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'acme-large' } })
+    // The wait field appears only after the switch opts in, so a card that
+    // leaves the switch off stores no delay to apply to nothing.
+    expect(screen.queryByLabelText(en.customRetryOnFailureDelay)).toBeNull()
+    fireEvent.click(screen.getByLabelText(en.customRetryOnFailure))
+    fireEvent.change(screen.getByLabelText(en.customRetryOnFailureDelay), { target: { value: '30' } })
+    fireEvent.click(screen.getByText(en.create))
+
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    expect(firstMutate(mutate)).toMatchObject({
+      ns: 'llm-pi-ai',
+      ops: [{
+        op: 'set',
+        path: ['providers', 'acme-gateway'],
+        value: { retryOnFailure: true, retryOnFailureDelayMs: 30_000 },
+      }],
+    })
+  })
+
+  it('writes the deployment user agent with the new profile', async () => {
+    const { mutate, onClose } = mountCard()
+
+    fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme-gateway' } })
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://gateway.acme.example/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'acme-large' } })
+    fireEvent.change(screen.getByLabelText(en.customUserAgent), { target: { value: 'acme-agent/2.0' } })
+    fireEvent.click(screen.getByText(en.create))
+
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    expect(firstMutate(mutate)).toMatchObject({
+      ns: 'llm-pi-ai',
+      ops: [{
+        op: 'set',
+        path: ['providers', 'acme-gateway'],
+        value: { userAgent: 'acme-agent/2.0' },
+      }],
+    })
+  })
+
+  it('refuses a malformed wait on create and stores the switch alone when empty', async () => {
+    const { mutate, onClose } = mountCard()
+
+    fireEvent.change(screen.getByLabelText(en.customRoute), { target: { value: 'acme-gateway' } })
+    fireEvent.change(screen.getByLabelText(en.baseUrl), { target: { value: 'https://gateway.acme.example/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'acme-large' } })
+    fireEvent.click(screen.getByLabelText(en.customRetryOnFailure))
+
+    // A malformed wait blocks the create rather than writing a rounded value.
+    fireEvent.change(screen.getByLabelText(en.customRetryOnFailureDelay), { target: { value: '1.5' } })
+    expect(screen.getByText(en.customRetryOnFailureDelayInvalid)).toBeTruthy()
+    expect(buttonNamed(en.create).disabled).toBe(true)
+    fireEvent.click(screen.getByText(en.create))
+    expect(mutate).not.toHaveBeenCalled()
+
+    // A digit string too large to be a safe millisecond count is refused too.
+    fireEvent.change(screen.getByLabelText(en.customRetryOnFailureDelay), { target: { value: '9007199254740993' } })
+    expect(screen.getByText(en.customRetryOnFailureDelayInvalid)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.create))
+    expect(mutate).not.toHaveBeenCalled()
+
+    // An empty wait is the immediate posture, so only the switch is written.
+    fireEvent.change(screen.getByLabelText(en.customRetryOnFailureDelay), { target: { value: '' } })
+    fireEvent.click(screen.getByText(en.create))
+
+    await waitFor(() => { expect(onClose).toHaveBeenCalledWith(true) })
+    expect(firstMutate(mutate)).toMatchObject({
+      ns: 'llm-pi-ai',
+      ops: [{
+        op: 'set',
+        path: ['providers', 'acme-gateway'],
+        value: { retryOnFailure: true },
+      }],
+    })
+  })
+
   it('scopes each card to fields a provider can actually own', async () => {
     // Reasoning effort is a per-MODEL capability and the
     // models under one provider disagree about it, so a provider-scoped
@@ -984,6 +1067,89 @@ describe('hand-declared providers', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
     expect(firstMutate(mutate).ops)
       .toEqual([{ op: 'set', path: ['providers', 'acme-gateway', 'retryOnFailure'], value: true }])
+  })
+
+  it('writes the wait beside the failure switch it belongs to', async () => {
+    const { mutate } = await mountSection({
+      providers: { 'acme-gateway': { baseURL: 'https://acme.test/v1', models: [{ id: 'm' }] } },
+      declaredRoutes: ['acme-gateway'],
+    })
+    openEditor('acme-gateway')
+
+    // The wait means nothing while the switch is off, so it is not offered.
+    expect(screen.queryByLabelText(en.customRetryOnFailureDelay)).toBeNull()
+
+    fireEvent.click(screen.getByLabelText(en.customRetryOnFailure))
+    fireEvent.change(screen.getByLabelText(en.customRetryOnFailureDelay), { target: { value: '5' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    expect(firstMutate(mutate).ops).toEqual([
+      { op: 'set', path: ['providers', 'acme-gateway', 'retryOnFailure'], value: true },
+      { op: 'set', path: ['providers', 'acme-gateway', 'retryOnFailureDelayMs'], value: 5_000 },
+    ])
+  })
+
+  it('shows a stored wait, refuses a malformed one, and clears it when blank', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        'acme-gateway': {
+          baseURL: 'https://acme.test/v1',
+          models: [{ id: 'm' }],
+          retryOnFailure: true,
+          retryOnFailureDelayMs: 15_000,
+        },
+      },
+      declaredRoutes: ['acme-gateway'],
+    })
+    openEditor('acme-gateway')
+
+    const wait = screen.getByLabelText<HTMLInputElement>(en.customRetryOnFailureDelay)
+    expect(wait.value).toBe('15')
+
+    // A partial number is not silently rounded into a profile write.
+    fireEvent.change(wait, { target: { value: '1.5' } })
+    expect(screen.getByText(en.customRetryOnFailureDelayInvalid)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.apply))
+    expect(mutate).not.toHaveBeenCalled()
+
+    // Nor is a digit string too large to be a safe millisecond count.
+    fireEvent.change(wait, { target: { value: '9007199254740993' } })
+    expect(screen.getByText(en.customRetryOnFailureDelayInvalid)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.apply))
+    expect(mutate).not.toHaveBeenCalled()
+
+    // Clearing the field drops the stored wait: the route re-issues at once.
+    fireEvent.change(wait, { target: { value: '' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    expect(firstMutate(mutate).ops)
+      .toEqual([{ op: 'unset', path: ['providers', 'acme-gateway', 'retryOnFailureDelayMs'] }])
+  })
+
+  it('drops the header map when every line is cleared', async () => {
+    const { mutate } = await mountSection({
+      providers: {
+        'acme-gateway': {
+          baseURL: 'https://acme.test/v1',
+          models: [{ id: 'm' }],
+          headers: { 'X-Tenant': 'acme' },
+        },
+      },
+      declaredRoutes: ['acme-gateway'],
+    })
+    openEditor('acme-gateway')
+    fireEvent.click(screen.getByText(en.customized))
+
+    // Clearing the text form is how a route drops the whole map; keeping an
+    // empty dictionary would leave a `headers: {}` the Host has to prune.
+    fireEvent.change(screen.getByLabelText(en.customHeaders), { target: { value: '' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalledTimes(1) })
+    expect(firstMutate(mutate).ops)
+      .toEqual([{ op: 'unset', path: ['providers', 'acme-gateway', 'headers'] }])
   })
 
   it('renames a declared route and falls back to its id when the name is cleared', async () => {

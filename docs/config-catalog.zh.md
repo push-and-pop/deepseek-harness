@@ -1779,7 +1779,7 @@ export interface Config extends ProtocolConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:236`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:243`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1863,11 +1863,18 @@ export interface PiAiProviderProfile {
   /**
    * Keep a failed model request on this same gateway. `false` (the default)
    * keeps the adapter's normal policy: up to five retries with exponential
-   * backoff. `true` retries without backoff until the request succeeds or is
-   * cancelled. Each provider decides independently, and an explicit
-   * `retryPolicy` wins over this switch.
+   * backoff. `true` retries until the request succeeds or is cancelled,
+   * waiting {@link retryOnFailureDelayMs} between attempts. Each provider
+   * decides independently, and an explicit `retryPolicy` wins over this switch.
    */
   retryOnFailure?: boolean
+  /**
+   * Fixed wait in milliseconds between retries while {@link retryOnFailure}
+   * is on (default `0`: re-issue immediately). The Models page edits it as
+   * whole seconds beside that switch; an off switch ignores it, and an
+   * explicit `retryPolicy` wins over both.
+   */
+  retryOnFailureDelayMs?: number
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */

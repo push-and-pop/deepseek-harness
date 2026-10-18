@@ -298,6 +298,25 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* The failure switch's fixed wait: a compact numeric field beside its label,
+   rendered only while the switch is on so it never reads as an off setting. */
+.retryDelayRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.retryDelayRow .fieldLabel {
+  flex: none;
+}
+
+/* `.input` is a full-width field declared later in this sheet, so the compact
+   width needs the row's selector to win without depending on rule order. */
+.retryDelayRow .retryDelayInput {
+  width: 96px;
+  flex: none;
+}
+
 .helpButton {
   width: 16px;
   height: 16px;

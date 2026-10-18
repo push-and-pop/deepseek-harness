@@ -159,6 +159,21 @@ function layoutOf(ns: string): EditorLayout {
   return 'unknown'
 }
 
+/**
+ * A profile's fixed retry wait as the whole seconds its switch field edits.
+ * Rounded for display only: the field cannot express a sub-second wait, and an
+ * untouched field writes nothing, so a hand-written fractional value survives
+ * unrelated edits instead of being silently rewritten.
+ */
+function retryDelayTextOf(profile: unknown): string {
+  const milliseconds = typeof profile === 'object' && profile !== null
+    ? (profile as { retryOnFailureDelayMs?: unknown }).retryOnFailureDelayMs
+    : undefined
+  return typeof milliseconds === 'number' && Number.isFinite(milliseconds) && milliseconds > 0
+    ? String(Math.round(milliseconds / 1000))
+    : ''
+}
+
 /** The credential reference this profile resolves keys through. */
 function refFor(
   schema: SettingsSchemaOperations,
@@ -188,6 +203,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     () => formatHeaderLines(schema.getPath(draftAt(schema, namespace, settingsPath), ['headers'])),
   )
   const [keyDraft, setKeyDraft] = useState('')
+  // The failure switch's wait has an intermediate text form like the header
+  // block: only a whole number of seconds reaches the draft, and an empty
+  // field drops the delay so the route re-issues immediately.
+  const [retryDelayText, setRetryDelayText] = useState(
+    () => retryDelayTextOf(schema.getPath(namespace.user, settingsPath)
+      ?? schema.getPath(namespace.value, settingsPath)),
+  )
   const [busy, setBusy] = useState(false)
   const [listBusy, setListBusy] = useState(false)
   const { onBusyChange } = props
@@ -206,6 +228,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const disabled = props.readOnly || busy
   const layout = layoutOf(namespace.ns)
   const keyRef = refFor(schema, namespace, settingsPath, props.provider)
+  // The failure switch and its wait read the draft the card edits, falling
+  // back to the effective layer exactly like every other curated field.
+  const retryOn = (schema.getPath(draft, ['retryOnFailure'])
+    ?? schema.getPath(fallback, ['retryOnFailure'])) === true
+  const retryDelaySeconds = retryDelayText.trim()
+  const retryDelayInvalid = retryDelaySeconds.length > 0
+    && (!/^\d+$/.test(retryDelaySeconds) || !Number.isSafeInteger(Number(retryDelaySeconds)))
   // The same schema read the create card makes, so the choices offered here
   // and there cannot drift apart: both come from the adapter's own `Config`.
   // Only the pi-ai layout has a per-route protocol for the read to find, and
@@ -246,6 +275,24 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     setDraft(current => Object.keys(parsed).length === 0
       ? schema.deletePath(current, ['headers'])
       : schema.setPath(current, ['headers'], parsed))
+  }
+  /**
+   * Parse the retry wait's text into the profile. Empty clears the delay, a
+   * whole number of seconds is stored as milliseconds, and anything else
+   * leaves the last valid value in the draft while `retryDelayInvalid` blocks
+   * the write and says what the field expects.
+   */
+  const updateRetryDelay = (text: string): void => {
+    setRetryDelayText(text)
+    const trimmed = text.trim()
+    if (trimmed.length === 0) {
+      setDraft(current => schema.deletePath(current, ['retryOnFailureDelayMs']))
+      return
+    }
+    if (!/^\d+$/.test(trimmed)) return
+    const seconds = Number(trimmed)
+    if (!Number.isSafeInteger(seconds)) return
+    setDraft(current => schema.setPath(current, ['retryOnFailureDelayMs'], seconds * 1000))
   }
 
   // The model list is validated by the same per-row checker for both families,
@@ -294,7 +341,10 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const applyOnce = async (): Promise<string | undefined> => {
     // The footer disables submit while a line is malformed; this keeps the
     // same refusal behind the only function that writes.
+    /* v8 ignore next -- unreachable from the card: the same failure disables submit */
     if (headersInvalid) return t('customHeadersInvalid')
+    /* v8 ignore next -- unreachable from the card: the same failure disables submit */
+    if (layout === 'pi-ai' && retryDelayInvalid) return t('customRetryOnFailureDelayInvalid')
     const ns = namespace.ns
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
@@ -564,14 +614,38 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   <label className={styles['checkboxLabel']}>
                     <input
                       type="checkbox"
-                      checked={(schema.getPath(draft, ['retryOnFailure'])
-                        ?? schema.getPath(fallback, ['retryOnFailure'])) === true}
+                      checked={retryOn}
                       aria-label={t('customRetryOnFailure')}
                       disabled={disabled}
                       onChange={(event) => { setFlag('retryOnFailure', event.target.checked) }}
                     />
                     <span>{t('customRetryOnFailure')}</span>
                   </label>
+                  {/* The wait only exists while the switch is on, so it cannot
+                      look like a setting that applies to the off posture. */}
+                  {retryOn
+                    ? (
+                      <div className={styles['retryDelayRow']}>
+                        <span className={styles['fieldLabel']}>{t('customRetryOnFailureDelay')}</span>
+                        <input
+                          className={`${styles['input']} ${styles['retryDelayInput']}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="numeric"
+                          value={retryDelayText}
+                          placeholder={t('customRetryOnFailureDelayPlaceholder')}
+                          aria-label={t('customRetryOnFailureDelay')}
+                          aria-invalid={retryDelayInvalid}
+                          disabled={disabled}
+                          onChange={(event) => { updateRetryDelay(event.target.value) }}
+                        />
+                      </div>
+                    )
+                    : null}
+                  {retryDelayInvalid
+                    ? <p className={styles['error']}>{t('customRetryOnFailureDelayInvalid')}</p>
+                    : null}
                   <p className={styles['advancedHint']}>{t('customRetryOnFailureHint')}</p>
                 </div>
               )
@@ -653,6 +727,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || headersInvalid
+          || (layout === 'pi-ai' && retryDelayInvalid)
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}
