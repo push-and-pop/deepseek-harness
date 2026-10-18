@@ -1,10 +1,14 @@
 /**
- * The web-search and web-fetch providers' settings pages, browser half: the
- * search key, endpoint, budget, and attribution `User-Agent` over the
- * `web-search-deepseek` namespace that provider registers, plus the fetch
- * `User-Agent` over the `web-fetch-http` namespace. Each page registers into
- * the Plugins page's `plugins.item` slot while the Host serves its namespace,
- * so a deployment without a provider shows no trace of it.
+ * The web-search and web-fetch settings pages, browser half. The search page is
+ * the switch between DeepSeek Messages search and the Search and Fetch APIs,
+ * which writes the `web` provider selection, plus the selected API's key,
+ * endpoint, and per-search limit — and, on the Messages side, the deployment's
+ * attribution `User-Agent` and extra request headers. It registers into the
+ * Plugins page's `plugins.item` slot while the Host serves
+ * `web-search-deepseek`, so a deployment without that provider shows no trace
+ * of it; the switch appears only while the Host also serves `web` and
+ * `web-deepseek-api`. The fetch page edits the `web-fetch-http` provider's
+ * `User-Agent` and appears only while that namespace is served as well.
  */
 
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -21,13 +25,15 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { WebFetchCard } from './WebFetchCard.tsx'
 import { WEB_FETCH_NS, WebFetchCardController } from './web-fetch-card-controller.ts'
 import { WebSearchCard } from './WebSearchCard.tsx'
-import { WEB_SEARCH_NS, WebSearchCardController } from './web-search-card-controller.ts'
+import { WEB_API_NS, WEB_NS, WEB_SEARCH_NS, WebSearchCardController } from './web-search-card-controller.ts'
 import { en, zh, type WebSearchSettingsLocaleKey } from './locales.ts'
 
-export type { WebSearchCardProps } from './WebSearchCard.tsx'
 export type { WebFetchCardProps } from './WebFetchCard.tsx'
-export type { WebSearchCardFace, WebSearchCardState, WebSearchSettings } from './web-search-card-controller.ts'
 export type { WebFetchCardFace, WebFetchCardState, WebFetchSettings } from './web-fetch-card-controller.ts'
+export type { WebSearchCardProps } from './WebSearchCard.tsx'
+export type {
+  WebApiSettings, WebProviderSelection, WebSearchCardFace, WebSearchCardScopes, WebSearchCardState, WebSearchSettings,
+} from './web-search-card-controller.ts'
 export type { WebSearchSettingsLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -51,10 +57,12 @@ export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'confi
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-web-search: dictionaries')
-  const card = new WebSearchCardController(ctx.configForms.get(WEB_SEARCH_NS), ctx)
+  const card = new WebSearchCardController({
+    web: ctx.configForms.get(WEB_NS), messages: ctx.configForms.get(WEB_SEARCH_NS), api: ctx.configForms.get(WEB_API_NS),
+  }, ctx)
   ctx.effect(() => () => { card.dispose() }, 'ui-settings-web-search: form subscription')
   // The credential the page reports is not part of any settings section, so
-  // its scope publishes nothing when one is written. This is the only signal
+  // no scope publishes when one is written. This is the only signal
   // that a key written on another surface reached the Host.
   ctx.effect(
     () => ctx.remote.$on('credentials/reference-updated', (ref) => { card.refreshCredential(ref) }),
