@@ -26,7 +26,7 @@ import { WebFetchCard } from './WebFetchCard.tsx'
 import { WEB_FETCH_NS, WebFetchCardController } from './web-fetch-card-controller.ts'
 import { WebSearchCard } from './WebSearchCard.tsx'
 import { WEB_API_NS, WEB_NS, WEB_SEARCH_NS, WebSearchCardController } from './web-search-card-controller.ts'
-import { en, zh, type WebSearchSettingsLocaleKey } from './locales.ts'
+import { en, ja, es, fr, de, ru, pt, zh, type WebSearchSettingsLocaleKey } from './locales.ts'
 
 export type { WebFetchCardProps } from './WebFetchCard.tsx'
 export type { WebFetchCardFace, WebFetchCardState, WebFetchSettings } from './web-fetch-card-controller.ts'
@@ -56,7 +56,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.credentials', 'confi
  */
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-web-search: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-web-search: dictionaries')
   const card = new WebSearchCardController({
     web: ctx.configForms.get(WEB_NS), messages: ctx.configForms.get(WEB_SEARCH_NS), api: ctx.configForms.get(WEB_API_NS),
   }, ctx)
