@@ -52,10 +52,13 @@ describe('subagent timing projection', () => {
     // The identity unit registers alongside timing; an empty log serves its
     // serializable null sentinel.
     expect(before.subagent).toBeNull()
+    // The model route unit registers with them; an empty log has no header yet.
+    expect(before.subagentModel).toBeNull()
     await serviceFiber.dispose()
     const after = ctx.sessionProjections.snapshot(ctx.sessions.create()).values
     expect(after.subagentTiming).toBeUndefined()
     expect(after.subagent).toBeUndefined()
+    expect(after.subagentModel).toBeUndefined()
   })
 
   it('resets inherited seed timing at the child descriptor and sums later completed turns', () => {

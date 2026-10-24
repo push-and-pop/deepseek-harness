@@ -638,6 +638,42 @@ describe('SubagentHeaderLineage', () => {
     expect(screen.getByRole('treeitem', { name: /interrupted.*当前未运行.*123M tok · 6秒/ })).toBeTruthy()
   })
 
+  it('shows each child concrete model route and reasoning effort in the catalog row', () => {
+    const entries = [
+      { id: 'routed' as SessionId, mode: 'continuable' as const, label: 'routed', activity: 'running' as const },
+      { id: 'bare' as SessionId, mode: 'one-shot' as const, label: 'bare', activity: 'inactive' as const },
+    ]
+    const summaries = {
+      routed: {
+        ...summary('routed' as SessionId, 1),
+        parentId: PARENT,
+        origin: 'subagent' as const,
+        running: true,
+        projectionValues: {
+          subagentModel: { provider: 'deepseek-account', model: 'deepseek-reasoner', reasoningEffort: 'high' },
+        },
+      },
+      bare: {
+        ...summary('bare' as SessionId, 1),
+        parentId: PARENT,
+        origin: 'subagent' as const,
+        projectionValues: {
+          // A child that has logged no request header yet serves the null sentinel.
+          subagentModel: null,
+        },
+      },
+    } as Record<SessionId, SessionSummary>
+    const input = props(catalog({ entries }), {}, summaries)
+    render(<HeaderCatalog {...input} />)
+    hoverCatalog(screen.getByRole('button', { name: '1 个子智能体，正在运行' }))
+
+    const routed = screen.getByRole('treeitem', { name: /routed/ })
+    expect(routed.getAttribute('aria-label'))
+      .toContain('deepseek-account/deepseek-reasoner · high')
+    const bare = screen.getByRole('treeitem', { name: /bare/ })
+    expect(bare.getAttribute('aria-label')).not.toContain('deepseek-account')
+  })
+
   it('ticks expanded running grandchildren under an idle child and releases their clock on collapse', async () => {
     const now = 2_000_000_000_000
     vi.useFakeTimers()

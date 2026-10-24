@@ -11,7 +11,9 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { foldSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
-import type { SubagentIdentityProjection, SubagentTimingProjection } from './projection-types.ts'
+import type {
+  SubagentIdentityProjection, SubagentModelProjection, SubagentTimingProjection,
+} from './projection-types.ts'
 
 /** Fold state for a subagent's latest timing snapshot. */
 export interface TimingState {
@@ -181,3 +183,50 @@ export const subagentIdentityProjectionDefinition = {
   // would replay into a value the schema rejects, so it must refold instead.
   stateVersion: 2,
 } satisfies ProjectionDefinition<'subagent', IdentityState>
+
+/** Fold state for a session's latest concrete model route. */
+export interface ModelRouteState {
+  /** Route from the latest `request/header`; absent before the first one. */
+  route?: SubagentModelProjection | undefined
+}
+
+// The cast bridges Zod's optional output (which includes explicit `undefined`)
+// to exactOptionalPropertyTypes, mirroring the identity projection's bridge.
+const modelRouteValueSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  reasoningEffort: z.string().min(1).optional(),
+}).strict() as unknown as z.ZodType<SubagentModelProjection>
+
+const modelRouteSchema = modelRouteValueSchema.nullable()
+
+const modelRouteStateSchema: z.ZodType<ModelRouteState> = z.object({
+  route: modelRouteValueSchema.optional(),
+}).strict()
+
+/**
+ * Fold the latest concrete model route from `request/header` events, last-wins:
+ * the header's `config` is the effective provider/model/effort the loop actually
+ * sends, after explicit selection, inheritance, and adapter defaults have all
+ * settled — exactly the concrete route a reader wants, not the proposal.
+ * `null` before the first header keeps the value JSON-transport-safe.
+ */
+export const subagentModelProjectionDefinition = {
+  key: 'subagentModel',
+  stateSchema: modelRouteStateSchema,
+  init: () => ({}),
+  apply: (state, event) => {
+    if (event.type !== 'request/header') return state
+    const { config } = event.data.header
+    const reasoningEffort = config.reasoningEffort
+    return {
+      route: {
+        provider: config.provider,
+        model: config.model,
+        ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      },
+    }
+  },
+  wire: { viewSchema: modelRouteSchema, view: state => state.route ?? null },
+  stateVersion: 1,
+} satisfies ProjectionDefinition<'subagentModel', ModelRouteState>

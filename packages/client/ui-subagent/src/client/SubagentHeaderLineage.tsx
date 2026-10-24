@@ -245,6 +245,13 @@ function CatalogRows({
           || (childCatalog.state === 'loading' && childCatalog.entries.length === 0)
         const summary = summaries[entry.id]
         const label = entry.label ?? entry.id
+        // The child's latest concrete model route: provider/model plus the
+        // effective reasoning effort, folded from its own request headers.
+        const route = summary?.projectionValues?.subagentModel
+        const modelRoute = route === undefined || route === null
+          ? undefined
+          : `${route.provider}/${route.model}`
+        const effort = route === undefined || route === null ? undefined : route.reasoningEffort
         const mode = external ? t('mode.external') : entry.mode === 'unknown' ? t('mode.unknown')
           : entry.mode === 'one-shot' ? t('mode.oneShot') : t('mode.continuable')
         const completed = !external && entry.activity === 'inactive'
@@ -254,7 +261,7 @@ function CatalogRows({
           : completed
             ? t('activity.completed')
             : t('activity.inactive')
-        const secondary = [summary?.title, requiresOpening ? t('catalog.migrationRequired') : mode, activity]
+        const secondary = [summary?.title, modelRoute, effort, requiresOpening ? t('catalog.migrationRequired') : mode, activity]
           .filter(value => value !== undefined)
           .join(' · ')
         const totalTokens = tokenTotal(summary?.projectionValues?.tokenUsage)

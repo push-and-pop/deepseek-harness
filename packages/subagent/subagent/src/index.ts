@@ -73,7 +73,7 @@ import { listChildren as listSubagentChildren, listDescendants as listSubagentDe
 import type { SubagentDescendantListEntry } from './list-children.ts'
 import { installSubagentArchiveAdmission } from './archive-admission.ts'
 import type { SubagentCatalogEntry } from './projection-types.ts'
-import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
+import { subagentIdentityProjectionDefinition, subagentModelProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
 import { subagentCatalogProjectionDefinition } from './catalog.ts'
 import { deliverSubagentPrompt } from './internal.ts'
 
@@ -234,6 +234,7 @@ export class SubagentRuntime extends TypertRemoteService {
     await sessionProjections.register(subagentCatalogProjectionDefinition)
     await sessionProjections.register(subagentTimingProjectionDefinition)
     await sessionProjections.register(subagentIdentityProjectionDefinition)
+    await sessionProjections.register(subagentModelProjectionDefinition)
   }
 
   /**

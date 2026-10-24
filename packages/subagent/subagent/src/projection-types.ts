@@ -5,6 +5,7 @@
  */
 
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
+import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 
 /** One current direct-child discovery row materialized from parent facts. */
 export type SubagentCatalogEntry =
@@ -66,12 +67,34 @@ export type SubagentIdentityProjection =
     seq: SessionSeq
   }
 
+/**
+ * Latest concrete model route of one session, folded last-wins from its
+ * `request/header` events: the provider, model, and effective reasoning
+ * effort actually in force for the session's requests, regardless of whether
+ * each value was explicitly selected, inherited, or resolved from defaults.
+ */
+export interface SubagentModelProjection {
+  /** Registered LLM provider id of the latest request header. */
+  provider: string
+  /** Provider-owned model id of the latest request header. */
+  model: string
+  /** Effective reasoning effort of the latest request header, when one is in force. */
+  reasoningEffort?: ReasoningEffortId
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /** Direct children in parent catalog event order, excluding fork-inherited facts. */
     subagentCatalog: SubagentCatalogEntry[]
     /** Active-turn duration and latest closed-turn completion for a descriptor-backed subagent session. */
     subagentTiming: SubagentTimingProjection
+    /**
+     * Latest concrete provider/model/effort route from `request/header` events.
+     * `null` ⟺ the session has logged no request header yet (or a malformed
+     * one); the sentinel mirrors {@link SubagentIdentityProjection}'s
+     * JSON-transport discipline.
+     */
+    subagentModel: SubagentModelProjection | null
     /**
      * Identity of a descriptor-backed subagent session. `null` ⟺ no valid
      * descriptor (missing, malformed, or unrecognized-version — deliberately
