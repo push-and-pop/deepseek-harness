@@ -62,6 +62,10 @@ export const workspaceDomainState = z.object({
   archivedSessionIds: z.array(sessionId).default([]),
   pinnedSessionIds: z.array(sessionId).default([]),
   pendingMutation: workspacePendingMutation.optional(),
+  /** Recover membership cleanup after a permanent Session deletion. */
+  pendingSessionDeletion: sessionId.optional(),
+  /** Recover Workspace references after one committed Session-tree batch. */
+  pendingSessionDeletions: z.array(sessionId).optional(),
 })
 
 /** Durable registry state inferred from {@link workspaceDomainState}. */

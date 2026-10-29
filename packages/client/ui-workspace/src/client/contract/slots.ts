@@ -26,7 +26,7 @@
  * row of a Session's "..." menu is an entry of
  * `sidebar.workspaces.session.menu.item`, and every hover button at the row's
  * end is an entry of `sidebar.workspaces.session.row.action`. The shipped
- * actions — pin, rename, fork, archive, copy ID — are ordinary entries
+ * actions — pin, rename, fork, archive, delete, copy ID — are ordinary entries
  * registered from `apply`, each carrying its own behavior in its own inject
  * face and reading its own Host state through hooks that face injects, so a
  * client plugin's action lands beside them by `order` and needs nothing from
@@ -152,7 +152,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * The rows of one Session's "..." menu, in ascending `order`. ui-workspace
      * registers the shipped rows here — `pin` (100), `rename` (200), `fork`
-     * (300), `archive` (400), and `session-id` (450) — so a plugin row is placed
+     * (300), `archive` (400), `delete` (425), and `session-id` (450) — so a plugin row is placed
      * by its own `order` among them. Use a package-namespaced `id`; reusing a shipped id at
      * another `priority` shadows that row. Each entry renders one
      * `role="menuitem"` `<button>` (the shipped rows use ui-primitives'
@@ -400,6 +400,40 @@ export interface SessionArchiveConfirmInjected {
    */
   stopAndArchiveSession: (sessionId: SessionId) => Promise<void>
 }
+
+/** Delete action raises a confirmation without mutating the Session. */
+export interface DeleteSessionInjected {
+  /** Ask for explicit confirmation of the target Session's permanent deletion. */
+  requestSessionDelete: (sessionId: SessionId, displayTitle: string) => void
+}
+
+/** Identity and title captured when the user chooses Delete. */
+export interface SessionDeleteTarget {
+  /** Session whose records will be deleted. */
+  sessionId: SessionId
+  /** Display title named in the confirmation. */
+  displayTitle: string
+
+}
+
+/** Pending deletion and the operation invoked only after confirmation. */
+export interface SessionDeleteConfirmInjected {
+  hooks: {
+    /** Pending confirmation, preserved when the row menu closes. */
+    deleteRequest: HostObservable<SessionDeleteTarget | null>
+  }
+  /** Cancel or consume the pending confirmation. */
+  settleSessionDelete: () => void
+  /** Permanently delete only the confirmed Session; rejection keeps the dialog open. */
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
+/** Props of the delete confirmation in the frame-wide overlay. */
+export type SessionDeleteConfirmProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionDeleteConfirmInjected, 'hooks'>
+  & PropsHooks<SessionDeleteConfirmInjected['hooks']>
 
 /** Fork action share. */
 export interface ForkSessionInjected {

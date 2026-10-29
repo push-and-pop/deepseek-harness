@@ -177,6 +177,7 @@ class FakeSessions implements ISessions {
 
 class FakeWorkspaces implements IWorkspaces {
   readonly initializeDefault = vi.fn<IWorkspaces['initializeDefault']>(async () => undefined)
+  readonly deleteSession = vi.fn<IWorkspaces['deleteSession']>(async () => undefined)
   readonly list: MutableSource<WorkspaceSnapshot>
   readonly archiveCalls: SessionId[] = []
   readonly unarchiveCalls: SessionId[] = []
@@ -1523,6 +1524,46 @@ describe('UiWorkspaceService', () => {
     b.workspaces.onArchive = () => Promise.reject(new Error('archive rejected'))
     await expect(b.uiWorkspace.archiveSession(idle)).rejects.toThrow('archive rejected')
     expect(b.workspaces.archiveCalls).toEqual([idle, idle])
+  })
+
+  it('clears only the deleted selection after Host acceptance and preserves selection on failure', async () => {
+    const b = bench()
+    b.uiWorkspace.openSession(sid('current'))
+    b.workspaces.deleteSession.mockRejectedValueOnce(new Error('busy'))
+    await expect(b.uiWorkspace.deleteSession(sid('current'))).rejects.toThrow('busy')
+    expect(b.sessions.retained[0]!.release).not.toHaveBeenCalled()
+    await b.uiWorkspace.deleteSession(sid('other'))
+    expect(b.sessions.retained[0]!.release).not.toHaveBeenCalled()
+    await b.uiWorkspace.deleteSession(sid('current'))
+    expect(b.workspaces.deleteSession).toHaveBeenLastCalledWith(sid('current'))
+    expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+  })
+
+  it('releases a selected descendant when its permanent deletion is published', () => {
+    const b = bench()
+    b.uiWorkspace.openSession(sid('child'))
+    b.ctx.emit('sessions/deleted', sid('child'))
+    expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a newer unrelated selection when a deleted descendant event arrives', () => {
+    const b = bench()
+    b.uiWorkspace.openSession(sid('child'))
+    b.uiWorkspace.openSession(sid('other'))
+    b.ctx.emit('sessions/deleted', sid('child'))
+    expect(b.sessions.retained[1]!.release).not.toHaveBeenCalled()
+  })
+
+  it('does not clear a newer selection when deletion finishes late', async () => {
+    const b = bench()
+    b.uiWorkspace.openSession(sid('current'))
+    let finish!: () => void
+    b.workspaces.deleteSession.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    const pending = b.uiWorkspace.deleteSession(sid('current'))
+    b.uiWorkspace.openSession(sid('newer'))
+    finish()
+    await pending
+    expect(b.sessions.retained[1]!.release).not.toHaveBeenCalled()
   })
 
   it('forwards unarchive commands and preserves failures', async () => {

@@ -78,6 +78,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   private pinRequestSeq = 0
   /** Host Workspace ids are never reused, so delayed data cannot resurrect a removed row. */
   private readonly removedIds = new Set<WorkspaceId>()
+  private readonly deletedSessionIds = new Set<WorkspaceArchiveSessionRequest['sessionId']>()
   private readonly listeners = new Set<() => void>()
   private snapshotCache: WorkspaceSnapshot
   private snapshotDirty = false
@@ -202,6 +203,25 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
       // The Host drops an archived session's pin in the same durable write;
       // mirror that locally so no frame shows the row both archived and pinned.
       this.installPinned(this.pinnedSessionIds.filter(id => id !== sessionId))
+    }
+    return result
+  }
+
+  /**
+   * Delete one Session and remove its local Workspace references only after Host success.
+   * @param sessionId - Session to erase.
+   * @returns generated Remote result.
+   */
+  async deleteSession(sessionId: WorkspaceArchiveSessionRequest['sessionId']): Promise<RemoteResult<void>> {
+    const result = await this.remote.deleteSession({ sessionId })
+    if (result.ok) {
+      this.deletedSessionIds.add(sessionId)
+      this.archiveRequestSeq++
+      this.pinRequestSeq++
+      this.items = this.items.map(view => this.withoutDeletedSessions(view))
+      this.installArchived(this.archivedSessionIds)
+      this.installPinned(this.pinnedSessionIds)
+      this.invalidate(true)
     }
     return result
   }
@@ -357,6 +377,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   private installArchived(archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds']): void {
+    archivedSessionIds = archivedSessionIds.filter(id => !this.deletedSessionIds.has(id))
     if (archivedSessionIds.length === this.archivedSessionIds.length
       && archivedSessionIds.every((id, index) => id === this.archivedSessionIds[index])) return
     this.archivedSessionIds = [...archivedSessionIds]
@@ -364,6 +385,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   private installPinned(pinnedSessionIds: WorkspacePinValue['pinnedSessionIds']): void {
+    pinnedSessionIds = pinnedSessionIds.filter(id => !this.deletedSessionIds.has(id))
     if (pinnedSessionIds.length === this.pinnedSessionIds.length
       && pinnedSessionIds.every((id, index) => id === this.pinnedSessionIds[index])) return
     this.pinnedSessionIds = [...pinnedSessionIds]
@@ -382,6 +404,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   }
 
   private upsert(view: WorkspaceView): void {
+    view = this.withoutDeletedSessions(view)
     if (this.removedIds.has(view.workspaceId)) return
     const index = this.items.findIndex(item => item.workspaceId === view.workspaceId)
     const installed = this.items[index]
@@ -414,10 +437,15 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   private installViews(views: readonly WorkspaceView[]): void {
     const installed = new Map<WorkspaceId, WorkspaceView>()
     for (const view of views) {
-      if (!this.removedIds.has(view.workspaceId)) installed.set(view.workspaceId, view)
+      if (!this.removedIds.has(view.workspaceId)) installed.set(view.workspaceId, this.withoutDeletedSessions(view))
     }
     this.items = [...installed.values()]
     this.committedOrder = views.map(view => view.workspaceId)
+  }
+
+  private withoutDeletedSessions(view: WorkspaceView): WorkspaceView {
+    const sessionIds = view.sessionIds.filter(id => !this.deletedSessionIds.has(id))
+    return sessionIds.length === view.sessionIds.length ? view : { ...view, sessionIds }
   }
 
   private invalidate(immediate = false): void {

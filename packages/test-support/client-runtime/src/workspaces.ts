@@ -155,9 +155,28 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
-   * Unarchive a session (recorded). The default mirrors the production face's
-   * observable effect: the id leaves the list state's archive set.
-   * @param sessionId - session to unarchive.
+   * Delete a Session (recorded), removing its Workspace references by default.
+   * @param sessionId - Session to delete.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    this.calls.push({ method: 'deleteSession', args: [sessionId] })
+    const stub = this.stubs.get('deleteSession')
+    if (stub !== undefined) {
+      await (stub(sessionId) as Promise<void>)
+      return
+    }
+    await this.update((draft) => {
+      draft.items = draft.items.map(workspace => ({
+        ...workspace, sessionIds: workspace.sessionIds.filter(id => id !== sessionId),
+      }))
+      draft.archivedSessionIds = draft.archivedSessionIds.filter(id => id !== sessionId)
+      draft.pinnedSessionIds = draft.pinnedSessionIds.filter(id => id !== sessionId)
+    })
+  }
+
+  /**
+   * Unarchive a Session (recorded), removing it from the archive set by default.
+   * @param sessionId - Session to unarchive.
    */
   async unarchiveSession(sessionId: SessionId): Promise<void> {
     this.calls.push({ method: 'unarchiveSession', args: [sessionId] })

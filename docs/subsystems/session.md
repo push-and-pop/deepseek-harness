@@ -840,6 +840,13 @@ Host service backing the generated `ctx.remote.session` namespace.
 resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult>
 
 /**
+ * Permanently delete a Session and all actual subagent descendants.
+ * @param sessionId - root whose stored history and Workspace references are erased.
+ * @param authorize - per-target access decision captured by the calling Remote owner.
+ */
+deleteSession(sessionId: SessionId, authorize?: (id: SessionId) => boolean): Promise<void>
+
+/**
  * Read all visible Session rows without resuming an Agent.
  * @param _request - reserved empty list request.
  * @param signal - cancellation for persistence reads and summary generation.
@@ -1210,15 +1217,16 @@ Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/sess
 
 #### `api-session/removed` — emit
 
-A Session left the live Host registry.
+A Session left the live registry or its stored history was permanently deleted.
 
 ```ts cordis-catalog
 /**
- * A Session left the live Host registry.
+ * A Session left the live registry or its stored history was permanently deleted.
  * @mode emit
  * @param sessionId - removed Session identity.
+ * @param permanentlyDeleted - true only after storage deletion commits; omission is an ordinary unload.
  */
-'api-session/removed'(sessionId: SessionId): void
+'api-session/removed'(sessionId: SessionId, permanentlyDeleted?: true): void
 ```
 
 Types: [SessionId](core.md)

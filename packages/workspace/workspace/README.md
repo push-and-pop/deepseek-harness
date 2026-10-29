@@ -78,6 +78,8 @@ Hide a session from the grouping when it should stop appearing there: it disappe
 
 Workspace registration does not establish ownership of its directory. A future destructive filesystem action must be separately named, explicitly confirmed, and enforce ownership and safety checks.
 
+Permanent Session deletion is separate from project removal and archive. `deleteSessions(sessionIds, remove)` journals the complete batch, delegates lifecycle admission and log removal to the [Session Controller](../../api/session-controller/README.md), then clears every deleted member's memberships, pins, and archive flags. `deleteSession(id, remove)` delegates to the same operation for one identity. Recovery accepts both the legacy `pendingSessionDeletion` and the batch `pendingSessionDeletions` markers. Workspace folders and files remain untouched.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -114,7 +116,7 @@ Archive admission is a capability seam over two Host events this package declare
 
 ### Durable shape
 
-The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, `pinnedSessionIds`, the optional `defaultWorkspaceId` first-use identity, and the optional `pendingMutation` marker. Archive and pin sets contain Session id strings, default to empty, and carry no per-entry objects or timestamps; the pin array keeps the most recently pinned id first. Archiving clears the pin in the same global-state write without changing Workspace membership. Unarchive runs no session-existence probe, because dropping an id from the set cannot introduce an unknown one, while archive verifies the session before adding it.
+The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, `pinnedSessionIds`, the optional `defaultWorkspaceId` first-use identity, and the optional `pendingMutation` and `pendingSessionDeletion` recovery markers. Archive and pin sets contain Session id strings, default to empty, and carry no per-entry objects or timestamps; the pin array keeps the most recently pinned id first. Archiving clears the pin in the same global-state write without changing Workspace membership. Unarchive runs no session-existence probe, because dropping an id from the set cannot introduce an unknown one, while archive verifies the session before adding it.
 
 ### Lifecycle
 
@@ -165,7 +167,7 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
-- **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities.
+- **Project removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped. Permanent Session deletion is separate, and folder removal is not provided.
 - **Missing paths retain recorded ownership, not verified symlink history** — a removed symlink and an incorrect but missing absolute cwd cannot be distinguished from existing records; both preserve an already-accounted id. No unaccounted session is assigned by this exception, and an account already removed from storage is not reconstructed.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.
 - **Archive and unarchive enforce different session checks** — a restore only drops an id from the archive set, so an entry whose session is gone still unarchives and leaves no unknown referent; a restore of an id that is not archived resolves without writing, while `archiveSession` rejects a session that is neither live nor persisted.

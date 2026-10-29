@@ -70,6 +70,7 @@ function deferred<T>(): Deferred<T> {
 
 class FakeWorkspaceRemote implements WorkspaceRemote {
   readonly initializeDefault = vi.fn<WorkspaceRemote['initializeDefault']>(async () => remoteOk({ workspace: workspace('default') }))
+  readonly deleteSession = vi.fn<WorkspaceRemote['deleteSession']>(async () => remoteOk(undefined))
   readonly calls: Array<{ readonly method: string; readonly request: unknown }> = []
   onCreate: (request: WorkspaceCreateRequest) => Promise<RemoteResult<WorkspaceCreateValue>> = request =>
     Promise.resolve(remoteOk({ workspace: workspace(request.path.split('/').pop() ?? 'workspace'), created: true }))
@@ -169,6 +170,40 @@ function baseline(
 ): void {
   model.replaceBaseline({ items, archivedSessionIds, pinnedSessionIds })
 }
+
+describe('ClientWorkspaceModel Session deletion', () => {
+  it('removes references only after success and ignores delayed stale echoes', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    const erased = sid('erased')
+    const kept = sid('kept')
+    const row = workspace('one', [erased, kept])
+    baseline(model, [row], [erased], [erased])
+    const gate = deferred<RemoteResult<void>>()
+    remote.deleteSession.mockReturnValueOnce(gate.promise)
+    const pending = model.deleteSession(erased)
+    expect(model.getSnapshot().items[0]?.sessionIds).toEqual([erased, kept])
+    gate.resolve(remoteOk(undefined))
+    await expect(pending).resolves.toEqual(remoteOk(undefined))
+    expect(remote.deleteSession).toHaveBeenCalledWith({ sessionId: erased })
+    model.upsertView(row)
+    model.replaceArchived([erased])
+    model.replacePinned([erased])
+    expect(model.getSnapshot()).toMatchObject({ items: [{ sessionIds: [kept] }], archivedSessionIds: [], pinnedSessionIds: [] })
+    baseline(model, [row], [erased], [erased])
+    expect(model.getSnapshot().items[0]?.sessionIds).toEqual([kept])
+  })
+
+  it('preserves every reference after a refused deletion', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [workspace('one', [sid('kept')])], [sid('kept')])
+    const before = model.getSnapshot()
+    remote.deleteSession.mockResolvedValueOnce(workspaceError(new RemoteError('gateway/internal', 'refused', {})))
+    await expect(model.deleteSession(sid('kept'))).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot()).toBe(before)
+  })
+})
 
 describe('ClientWorkspaceModel', () => {
   it('publishes the prepared Workspace and leaves the list unchanged on refusal', async () => {

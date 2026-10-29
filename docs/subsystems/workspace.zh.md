@@ -366,6 +366,12 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
 
 /**
+ * Permanently delete a Session tree after access is checked on every member.
+ * @param request - root whose actual subagent descendants are also erased.
+ */
+@Remote({ resources: { session: request => request.sessionId } }) async deleteSession(request: WorkspaceSessionDeleteRequest): Promise<void>
+
+/**
  * Restore one archived Session to Workspace grouping surfaces.
  * @param request - Session identity to unarchive.
  * @returns the complete resulting archive set.
@@ -578,6 +584,20 @@ pinSession(sessionId: SessionId): Promise<void>
  * @returns resolution after durability.
  */
 unpinSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Delete one Session through the recoverable batch metadata operation.
+ * @param sessionId - Session whose references are removed after storage commits.
+ * @param remove - lifecycle owner's storage commit.
+ */
+deleteSession(sessionId: SessionId, remove: () => Promise<void>): Promise<void>
+
+/**
+ * Journal one complete Session tree and clear its references only after storage commits.
+ * @param sessionIds - exact tree members; duplicates are ignored.
+ * @param remove - lifecycle owner that releases its Agents and commits the storage batch.
+ */
+deleteSessions(sessionIds: readonly SessionId[], remove: () => Promise<void>): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

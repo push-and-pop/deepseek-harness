@@ -373,6 +373,8 @@ describe('WorkspaceController', () => {
     await expect(controller.unarchiveSession(sid('session'))).resolves.toBeUndefined()
     await expect(controller.pinSession(sid('session'))).resolves.toBeUndefined()
     await expect(controller.unpinSession(sid('session'))).resolves.toBeUndefined()
+    await expect(controller.deleteSession(sid('session'))).resolves.toBeUndefined()
+    expect(mock.log.requests('workspace/deleteSession')).toEqual([{ sessionId: 'session' }])
     await expect(controller.delete(wid('one'))).resolves.toBeUndefined()
     // Each command crosses the wire as one positional request object.
     expect(mock.log.requests('workspace/create')).toEqual([{ path: '/work/created' }])
@@ -407,6 +409,10 @@ describe('WorkspaceController', () => {
     await expect(controller.delete(wid('missing'))).rejects.toThrow('workspace delete failed: workspace/not-found: gone')
     mock.remote.workspace.insertBefore.mockResolvedValueOnce(err(missingWorkspace))
     await expect(controller.insertBefore(wid('missing'))).rejects.toThrow('workspace reorder failed: workspace/not-found: gone')
+    mock.remote.workspace.deleteSession.mockResolvedValueOnce(err(missingSession))
+    await expect(controller.deleteSession(sid('session'))).rejects.toMatchObject({
+      name: 'WorkspaceSessionDeleteError', rpcError: { code: 'session/not-found', details: { sessionId: 'session' } },
+    })
     mock.remote.workspace.archiveSession.mockResolvedValueOnce(err(missingSession))
     const archiveMissing = controller.archiveSession(sid('session'))
     await expect(archiveMissing).rejects.toBeInstanceOf(WorkspaceArchiveError)

@@ -66,6 +66,8 @@ Fork 将 `atSeq` 选定的含边界事件前缀（包括开放轮次内的截点
 
 恢复会话时若已有写句柄占用，返回 `session/writer-held`，并携带会话 id；其他恢复失败仍返回 `gateway/internal`。
 
+`ctx.sessionController.deleteSession(sessionId)` 永久删除普通根会话及任意层级的全部实际子代理会话，沿 `origin: subagent` 和 `parentSession` 遍历；独立分叉和工作区文件保持不变。修改存储前检查每个成员的活动与权限，空闲子会话由 Subagent 生命周期所有者释放，运行中或正在启动的后代会使整次操作被拒绝，而非强行停止。持久化先取得所有目标的写锁，再移除目录；注册表记录批量引用清理恢复标记。忙会话返回 `session/delete-busy`，写锁占用返回 `session/writer-held`，根不存在返回 `session/not-found`，未授权成员返回不暴露子会话身份的 `remote-access/denied`。提交后以 `api-session/removed(id, true)` 区分永久删除和普通卸载；Client 阻止旧目录和列表复活已删身份，并发布本地 `sessions/deleted(id)`，供选择状态所有者清理当前已删会话。Client 入口为 [Workspace Controller](../workspace-controller/README.zh.md) 的 `workspaces.deleteSession(id)`。
+
 `loadThrough(seq)` 在共享目标被覆盖或加载结束前私下保留较早页面，随后把成功取得的页面按顺序作为一次前插发布。历史加载期间实时事件仍然可见。后续页面失败时保留已成功取得的部分；历史窗口被替换时丢弃被替换窗口的暂存页面。普通 `loadOlder()` 直接发布 Host 选取的一页结果。
 
 Client 的首次 `follow`、重连首屏与 `loadOlder()` 至少请求 50 条以 append 方式追加的 `user/message` 和 `assistant/message` 事件，并向前跨过至少两个 `turn/start`，其中包含已加载窗口开头尚未补齐的轮次。Host 在首次同时满足两个下限的轮次开头停止；若先达到 500 条计数消息或历史已耗尽，则立即返回。Steering 不增加轮次分界。区间内的其他事件随页返回，但不计入消息预算。分页和 follow 请求可选的 `turnWindow` 在 `maxMessages` 上限内指定这两个下限。`loadThrough()` 复用相同规则，仅将每页消息数下限设为 200；500 条上限不限制整次跳转。不带 `turnWindow` 的请求保留按消息对齐的分页方式。

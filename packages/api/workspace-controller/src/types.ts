@@ -124,6 +124,11 @@ export interface WorkspaceArchiveSessionRequest {
   readonly stopActivity?: boolean
 }
 
+/** Explicit permanent deletion of a root and all actual subagent descendants. */
+export interface WorkspaceSessionDeleteRequest {
+  readonly sessionId: SessionId
+}
+
 /** Session requested for restoration from the archived Session list. */
 export interface WorkspaceUnarchiveSessionRequest {
   readonly sessionId: SessionId

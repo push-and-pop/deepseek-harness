@@ -90,6 +90,11 @@ interface Channel {
  * manager's list projection reads the `title` key).
  */
 export class ProjectionValueStore {
+  /**
+   * @param project - optional owner policy; returning undefined discards a value without accepting its watermark.
+   */
+  constructor(private readonly project?: (key: string, value: unknown) => { value: unknown } | undefined) {}
+
   private readonly rows = new Map<string, Row>()
   private readonly channels = new Map<string, Channel>()
   private valuesCache: Readonly<Partial<SessionProjectionMap>> | undefined
@@ -157,6 +162,11 @@ export class ProjectionValueStore {
    * @param seq - the unit's watermark at emission.
    */
   apply(key: string, value: unknown, seq: SessionSeqCursor): void {
+    if (this.project !== undefined) {
+      const projected = this.project(key, value)
+      if (projected === undefined) return
+      value = projected.value
+    }
     const row = this.rows.get(key)
     // higher seq wins among sequenced rows; replays and stale frames drop. A
     // cached row has no comparable seq and always yields.
@@ -176,7 +186,9 @@ export class ProjectionValueStore {
   applyCached(values: Readonly<Record<string, unknown>>): void {
     for (const key of Object.keys(values)) {
       if (this.rows.get(key)?.kind === 'sequenced') continue
-      this.rows.set(key, { kind: 'cached', value: values[key] })
+      const projected = this.project === undefined ? { value: values[key] } : this.project(key, values[key])
+      if (projected === undefined) continue
+      this.rows.set(key, { kind: 'cached', value: projected.value })
       this.changed(key)
     }
   }
@@ -207,6 +219,18 @@ export class ProjectionValueStore {
       // type so `row.seq` is readable.
       if (row.kind === 'sequenced' && row.seq > baseline.asOfSeq) continue
       this.rows.delete(key)
+      this.changed(key)
+    }
+  }
+
+  /** Reapply the owner's policy to cached values without changing their accepted watermarks. */
+  reconcile(): void {
+    if (this.project === undefined) return
+    for (const [key, row] of this.rows) {
+      const projected = this.project(key, row.value)
+      if (projected === undefined) this.rows.delete(key)
+      else if (projected.value !== row.value) this.rows.set(key, { ...row, value: projected.value })
+      else continue
       this.changed(key)
     }
   }

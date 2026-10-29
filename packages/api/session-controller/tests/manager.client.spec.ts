@@ -733,6 +733,44 @@ describe('Host Remote event routing', () => {
   })
 })
 
+describe('permanent Session tree removal', () => {
+  it('removes a child permanently without allowing stale catalogs or added events to revive it', async ({ mock, remote }) => {
+    const manager = makeManager(mock, remote)
+    onTestFinished(() => manager.dispose())
+    manager.handleSessionAdded(summary(S1))
+    manager.handleSessionAdded(summary(S2, { parentSessionId: S1, origin: 'subagent' }))
+    const catalog = [{ id: S2, createdAt: 1, mode: 'continuable' as const }]
+    manager.handleControlFrame({ type: 'projection', sessionId: S1, key: 'subagentCatalog', seq: 0, value: catalog })
+    const resident = manager.get(S2)
+    manager.handleSessionRemoved(S2)
+    expect(resident.getSnapshot().removed).toBe(false)
+    manager.handleSessionRemoved(S2, true)
+    expect(resident.getSnapshot().removed).toBe(true)
+    manager.handleSessionAdded(summary(S2, { parentSessionId: S1, origin: 'subagent' }))
+    manager.handleControlFrame({ type: 'projection', sessionId: S1, key: 'subagentCatalog', seq: 1, value: catalog })
+    expect(manager.subagentAddress(S2)).toBeUndefined()
+    expect(manager.getListSnapshot().items.map(row => row.sessionId)).not.toContain(S2)
+    expect(manager.getListSnapshot().projectionsBySession[S1]?.values.subagentCatalog).toEqual([])
+    expect(() => manager.resolveTarget({ parentSessionId: S1, childSessionId: S2, mode: 'continuable' })).toThrow()
+    remote.session.list.mockResolvedValueOnce(ok({ items: [summary(S1), summary(S2, { parentSessionId: S1, origin: 'subagent' })] }))
+    await manager.refreshList()
+    expect(manager.getListSnapshot().items.map(row => row.sessionId)).toEqual([S1])
+  })
+
+  it('does not replay a permanently deleted descendant from an in-flight list baseline', async ({ mock, remote }) => {
+    const manager = makeManager(mock, remote)
+    onTestFinished(() => manager.dispose())
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof remote.session.list>>>()
+    remote.session.list.mockImplementationOnce(() => pending.promise)
+    const refresh = manager.refreshList()
+    manager.handleSessionRemoved(S2, true)
+    pending.resolve(ok({ items: [summary(S1), summary(S2, { parentSessionId: S1, origin: 'subagent' })] }))
+    await refresh
+    expect(manager.getListSnapshot().items.map(row => row.sessionId)).toEqual([S1])
+    expect(manager.subagentAddress(S2)).toBeUndefined()
+  })
+})
+
 describe('subagent catalogs', () => {
   it('retains external membership without creating a local browsing address', ({ mock, remote }) => {
     const manager = makeManager(mock, remote)

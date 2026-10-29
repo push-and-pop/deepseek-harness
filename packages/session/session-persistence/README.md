@@ -33,7 +33,7 @@ The seam ships the [JSONL](../session-persistence-jsonl/README.md) backend: one 
 
 ### What the service provides
 
-With a backend mounted, five service methods address stored sessions:
+With a backend mounted, the service addresses stored sessions through these methods:
 
 ```text
 const handle = await ctx.sessionPersistence.create(header)     // store a new session, take write ownership
@@ -42,7 +42,10 @@ const reader = await ctx.sessionPersistence.open(id, 'read')   // observe withou
 const snap = await ctx.sessionPersistence.stat(id)             // header + revision (+ eventCount / sizeBytes) without a log read
 const all = await ctx.sessionPersistence.list()                // one snapshot per visible stored session
 await ctx.sessionPersistence.flush()                           // backend-wide durability barrier over every active write handle
+const removed = await ctx.sessionPersistence.delete(id)         // permanently remove only this Session and every stored generation
 ```
+
+`delete(id)` returns whether the stored Session existed and was removed. It refuses an active writer with `SessionAlreadyOwnedError`; callers must stop and release their owned Agent first. Read handles do not block deletion and may fail later reads. Providers without deletion support reject without changing storage. Lifecycle safety checks belong to the [Session Controller](../../api/session-controller/README.md), not this storage method.
 
 Service-level `flush()` drains every active write handle's routed events and materializes its session, exactly as each handle's own `flush` would; failures aggregate per session as an `AggregateError` without abandoning the sweep, and a handle closed mid-sweep counts as flushed because close itself drains durably.
 
@@ -150,7 +153,7 @@ These limits define where the seam's guarantees stop. They are current package c
 - **The seam guarantees write ownership only within one backend instance** — cross-process exclusion is provider-specific. The shipped JSONL provider adds a kernel-backed lease across instances and processes; another provider must document an equivalent guarantee or require deployments to prevent concurrent writers.
 - **A backend plugin reload under live sessions fails their writers loudly** — a reloaded backend cannot serve handles the old instance issued; writes fail until the sessions restart, and nothing silently re-adopts the logs.
 - **Only handle-acquired sessions persist** — `ctx.sessions.create` + `session/flush` alone stores nothing; agent-loop is the production acquisition point, and tests seed storage through `create`/`append`/`close`.
-- **No deletion or retention API** — pruning stored sessions is out-of-band backend maintenance.
+- **No automatic retention policy** — deletion is explicit and provider support is required.
 - **`list()` is unpaginated and unfiltered** — it returns every stored session's snapshot; fine for local stores, unindexed at scale.
 - **Synthetic closers are the only crash story** — resume appends `interruptedTurnClosers` through the write handle; there is no partial-turn resume that continues an interrupted turn instead of closing it.
 

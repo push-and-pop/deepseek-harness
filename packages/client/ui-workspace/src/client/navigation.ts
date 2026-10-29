@@ -101,6 +101,11 @@ export interface UiWorkspace {
    */
   unarchiveSession(sessionId: SessionId): Promise<void>
   /**
+   * Delete a Session after user confirmation; clear selection only after Host acceptance.
+   * @param sessionId - Session to permanently delete.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
+  /**
    * Pin a Session on the Host, then lead it in its accounts' saved orders
    * (its Workspace group or Ungrouped, and the flat list). The order write
    * reads the memberships current at completion, so reorders that landed
@@ -193,6 +198,9 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     private readonly notify: (toast: RowToast) => void,
   ) {
     super(ctx, 'uiWorkspace')
+    ctx.on('sessions/deleted', (sessionId) => {
+      if (this.mainReference?.sessionId === sessionId) this.clearMain()
+    })
     ctx.effect(() => {
       const stop = this.watchNavigation()
       return () => {
@@ -386,6 +394,11 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   async unarchiveSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.unarchiveSession(sessionId)
+  }
+
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    await this.workspaces.deleteSession(sessionId)
+    if (this.mainReference?.sessionId === sessionId) this.clearMain()
   }
 
   async pinSession(sessionId: SessionId): Promise<void> {

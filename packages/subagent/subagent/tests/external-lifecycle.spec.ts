@@ -37,6 +37,45 @@ function run(id: string, result: Promise<SubagentResult>, dispose = () => Promis
 }
 
 describe('external activation ownership', () => {
+  it('idle-only deletion admission refuses an external execution without stopping it', async () => {
+    const result = Promise.withResolvers<SubagentResult>()
+    const dispose = vi.fn(() => Promise.resolve())
+    let signal: AbortSignal | undefined
+    const fixture = await setup((request) => {
+      signal = request.signal
+      return Promise.resolve(run('idle-only-external', result.promise, dispose))
+    })
+    const activation = await fixture.start()
+    try {
+      await expect(fixture.ctx.subagents.drainDescendants([fixture.parent], { idleOnly: true }))
+        .rejects.toMatchObject({ code: 'DESCENDANTS_BUSY' })
+      expect(signal?.aborted).toBe(false)
+      expect(dispose).not.toHaveBeenCalled()
+    } finally {
+      result.resolve(complete)
+      await activation.dispose()
+    }
+  })
+
+  it('idle-only deletion admission refuses pending startup without aborting it', async () => {
+    const entered = Promise.withResolvers<undefined>()
+    const published = Promise.withResolvers<SubagentRun>()
+    let signal: AbortSignal | undefined
+    const fixture = await setup((request) => {
+      signal = request.signal
+      entered.resolve(undefined)
+      return published.promise
+    })
+    const starting = fixture.start()
+    await entered.promise
+    await expect(fixture.ctx.subagents.drainDescendants([fixture.parent], { idleOnly: true }))
+      .rejects.toMatchObject({ code: 'DESCENDANTS_BUSY' })
+    expect(signal?.aborted).toBe(false)
+    published.resolve(run('idle-only-starting', Promise.resolve(complete)))
+    const activation = await starting
+    await activation.dispose()
+  })
+
   it('observes admitted startup and reports no children after the execution releases', async () => {
     const entered = Promise.withResolvers<undefined>()
     const published = Promise.withResolvers<SubagentRun>()

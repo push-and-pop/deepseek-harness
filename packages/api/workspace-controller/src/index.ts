@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
+import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { WorkspaceCommands } from './commands.ts'
 import { DirectoryPickerController } from './directory-picker.ts'
@@ -26,6 +27,7 @@ import type {
   WorkspacePinValue,
   WorkspaceRenameRequest,
   WorkspaceUnarchiveSessionRequest,
+  WorkspaceSessionDeleteRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
 } from './types.ts'
@@ -159,6 +161,17 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('archiveSession')
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     return this.commands.archiveSession(request)
+  }
+
+  /**
+   * Permanently delete a Session tree after access is checked on every member.
+   * @param request - root whose actual subagent descendants are also erased.
+   */
+  @Remote({ resources: { session: request => request.sessionId } })
+  async deleteSession(request: WorkspaceSessionDeleteRequest): Promise<void> {
+    const sessions = this.ctx.get('sessionController')
+    if (sessions === undefined) throw new Error('Session deletion requires the Session Controller')
+    await sessions.deleteSession(request.sessionId, id => this.ctx.remoteAccess.allows({ kind: 'session', id }))
   }
 
   /**

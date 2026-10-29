@@ -293,9 +293,15 @@ export class SubagentManager {
    * Stop the managed descendants of exact live host-owned parents.
    * @param parents - exact live roots whose managed descendants must stop.
    */
-  async drainDescendants(parents: readonly Agent[]): Promise<void> {
+  async drainDescendants(parents: readonly Agent[], options: { readonly idleOnly?: boolean } = {}): Promise<void> {
     const roots = new Set(parents.filter(parent => this.ctx.agents.get(parent.id) === parent))
     if (roots.size === 0) return
+    if (options.idleOnly === true) {
+      const pending = [...this.materializations].some(item => item.lineage.some(parent => roots.has(parent)))
+      const busy = [...this.resident.values()].some(item => [...roots].some(root => activationAgent(item) !== root
+        && item.ancestry.has(root)) && (item.kind === 'external' || item.handle.agent.status !== 'idle'))
+      if (pending || busy) throw new SubagentError('descendant work is still active; deletion cannot stop it', 'DESCENDANTS_BUSY')
+    }
 
     for (const root of roots) {
       this.closingMembers(root).add(root)

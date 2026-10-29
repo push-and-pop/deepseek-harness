@@ -187,6 +187,31 @@ export abstract class SessionPersistence extends Service {
   abstract flush(): Promise<void>
 
   /**
+   * Permanently remove one stored Session, including every physical generation.
+   * Refuses an active writer; callers must first stop and release their owned
+   * Agent. Read handles do not prevent deletion and may subsequently fail reads.
+   * Providers without deletion support reject without changing storage.
+   * @param id - Session identity to erase; no descendants are deleted.
+   * @returns whether the Session existed and was removed.
+   * @throws {SessionAlreadyOwnedError} while any writer owns the Session.
+   */
+  delete(id: SessionId): Promise<boolean> {
+    return Promise.reject(new Error(`session persistence does not support deleting session "${id}"`))
+  }
+
+  /**
+   * Permanently remove a batch after acquiring exclusive ownership of every target.
+   * A refusal or preparation failure leaves all original logs in place. Providers
+   * without batch support reject without delegating to individual deletes.
+   * @param ids - exact Session identities; duplicates are ignored.
+   * @returns identities that existed and were committed as removed.
+   * @throws {SessionAlreadyOwnedError} when any target has a writer.
+   */
+  deleteMany(ids: readonly SessionId[]): Promise<readonly SessionId[]> {
+    return Promise.reject(new Error(`session persistence does not support batch deletion of ${ids.length} session(s)`))
+  }
+
+  /**
    * Observe one stored session without reading its event log or taking
    * ownership.
    *

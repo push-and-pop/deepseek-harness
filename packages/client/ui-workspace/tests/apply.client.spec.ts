@@ -21,6 +21,8 @@ import {
 } from '../src/client/contract/slots.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog } from '../src/client/session-actions/ArchiveSession.tsx'
+import { DeleteSessionMenuItem, SessionDeleteConfirmDialog } from '../src/client/session-actions/DeleteSession.tsx'
+import type { DeleteSessionInjected, SessionDeleteConfirmInjected } from '../src/client/contract/slots.ts'
 import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.tsx'
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
@@ -136,6 +138,7 @@ async function bench(access: 'fake' | 'static' = 'fake') {
     insertBefore: vi.fn(async () => undefined),
     archiveSession: vi.fn(async () => undefined),
     unarchiveSession: vi.fn(async () => undefined),
+    deleteSession: vi.fn(async () => undefined),
     pinSession,
     unpinSession,
     insertSessionBefore: vi.fn(async () => ({})),
@@ -287,9 +290,29 @@ describe('ui-workspace apply', () => {
     await Promise.resolve()
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
     // The row actions follow the browser's own declaration, whenever it lands.
-    expect(after.slots.entries(MENU_ITEM)).toHaveLength(5)
+    expect(after.slots.entries(MENU_ITEM)).toHaveLength(6)
     expect(after.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(after.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(after.slots.entries('shell.overlay')).toHaveLength(4)
+  })
+
+  it('requests deletion without mutating, invokes the confirmed id, preserves rejections, and settles the dialog', async () => {
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const remove = vi.spyOn(b.ctx.uiWorkspace, 'deleteSession').mockResolvedValue(undefined)
+    const action = faceOf(entry(b.slots, MENU_ITEM, 'delete')) as DeleteSessionInjected
+    const dialog = faceOf(entry(b.slots, 'shell.overlay', 'workspace.session-delete')) as SessionDeleteConfirmInjected
+    expect(dialog.hooks.deleteRequest.getSnapshot()).toBeNull()
+    action.requestSessionDelete(sid('one'), 'Target title')
+    expect(remove).not.toHaveBeenCalled()
+    expect(dialog.hooks.deleteRequest.getSnapshot()).toEqual({ sessionId: sid('one'), displayTitle: 'Target title' })
+    dialog.settleSessionDelete()
+    expect(dialog.hooks.deleteRequest.getSnapshot()).toBeNull()
+    expect(remove).not.toHaveBeenCalled()
+    await dialog.deleteSession(sid('one'))
+    expect(remove).toHaveBeenCalledExactlyOnceWith(sid('one'))
+    remove.mockRejectedValueOnce(new Error('busy'))
+    await expect(dialog.deleteSession(sid('one'))).rejects.toThrow('busy')
   })
 
   it('declares the two Session row lists and registers the shipped actions and overlay surfaces into them', async () => {
@@ -312,6 +335,7 @@ describe('ui-workspace apply', () => {
       ['rename', 200, RenameSessionMenuItem, 'workspace'],
       ['fork', 300, ForkSessionMenuItem, 'workspace'],
       ['archive', 400, ArchiveSessionMenuItem, 'workspace'],
+      ['delete', 425, DeleteSessionMenuItem, 'workspace'],
       ['session-id', 450, SessionIdMenuItem, 'workspace'],
     ])
     expect(rows(ROW_ACTION)).toEqual([
@@ -321,6 +345,7 @@ describe('ui-workspace apply', () => {
     expect(rows('shell.overlay')).toEqual([
       ['workspace.session-rename', undefined, SessionRenameDialog, 'workspace'],
       ['workspace.session-archive', undefined, SessionArchiveConfirmDialog, 'workspace'],
+      ['workspace.session-delete', undefined, SessionDeleteConfirmDialog, 'workspace'],
       ['workspace.row-toast', undefined, RowActionToast, undefined],
     ])
     // Only archive notice entries share the browser's viewing store.
@@ -900,9 +925,9 @@ describe('ui-workspace apply', () => {
     declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.overlay')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(b.slots.entries(MENU_ITEM)).toHaveLength(5)
+    expect(b.slots.entries(MENU_ITEM)).toHaveLength(6)
     expect(b.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(4)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)

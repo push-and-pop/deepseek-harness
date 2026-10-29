@@ -394,9 +394,14 @@ export class ClientSessions implements ISessions {
   /**
    * Apply one remotely forwarded Session removal.
    * @param sessionId - removed Session identity.
+   * @param permanentlyDeleted - true only for committed durable deletion, not Agent unload.
    */
-  handleSessionRemoved(sessionId: Parameters<SessionManager['handleSessionRemoved']>[0]): void {
-    this.manager.handleSessionRemoved(sessionId)
+  handleSessionRemoved(sessionId: SessionId, permanentlyDeleted?: true): void {
+    this.manager.handleSessionRemoved(sessionId, permanentlyDeleted)
+    if (permanentlyDeleted === true) {
+      this.projectList()
+      this.rootCtx.emit('sessions/deleted', sessionId)
+    }
   }
 
   /**
@@ -502,6 +507,7 @@ export class ClientSessions implements ISessions {
    */
   retainAgentScope(id: SessionId): SessionReference {
     if (this.closed) throw new Error('Session Controller is disposed')
+    this.manager.assertNotDeleted(id)
     return this.retainScope(id, 'gateway')
   }
 
@@ -648,7 +654,7 @@ export class ClientSessions implements ISessions {
     }
     for (const [parentId, projection] of Object.entries(projectionsBySession)) {
       for (const child of projection.values.subagentCatalog ?? []) {
-        if (child.mode === 'external') continue
+        if (child.mode === 'external' || this.manager.isDeleted(child.id)) continue
         const childId = child.id
         const summary = byId[childId]
         const projectionValues = summary?.projectionValues ?? this.manager.projectionValues(childId)
@@ -673,7 +679,7 @@ export class ClientSessions implements ISessions {
       }
     }
     for (const [id, record] of this.scopes) {
-      if (byId[id] !== undefined) continue
+      if (this.manager.isDeleted(id) || byId[id] !== undefined) continue
       const address = this.manager.subagentAddress(id)
       if (address === undefined) continue
       const previous = previousById[id]

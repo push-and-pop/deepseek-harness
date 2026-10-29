@@ -78,6 +78,8 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 Workspace 注册不意味着拥有其目录。未来的破坏性文件系统操作必须单独命名、获得明确确认，并执行所有权与安全检查。
 
+永久删除会话与移除项目、归档会话彼此独立。`deleteSessions(sessionIds, remove)` 为整批目标写入恢复标记，由 [Session Controller](../../api/session-controller/README.zh.md) 处理生命周期准入和日志删除，提交后清理全部已删成员的工作区关系、置顶与归档标记。单个身份的 `deleteSession(id, remove)` 委托同一操作。恢复兼容旧的 `pendingSessionDeletion` 和新的批量 `pendingSessionDeletions` 标记；工作区文件夹与文件保持不变。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -115,7 +117,7 @@ Workspace 注册不意味着拥有其目录。未来的破坏性文件系统操�
 
 ### 持久形态
 
-注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds`、`pinnedSessionIds`、可选的首次使用身份 `defaultWorkspaceId` 与可选 `pendingMutation` 标记的全局状态。归档与置顶集合存储会话 id 字符串，默认值为空，不包含逐项对象或时间戳；置顶数组把最近置顶的 id 放在前面。归档在同一次全局状态写入中清除置顶，但不改变 Workspace 成员关系。取消归档不做会话存在性探测，因为从集合中移除 id 不可能引入未知 id，而归档会在加入前校验会话。
+注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds`、`pinnedSessionIds`、可选的首次使用身份 `defaultWorkspaceId` 与可选 `pendingMutation`、`pendingSessionDeletion` 恢复标记的全局状态。归档与置顶集合存储会话 id 字符串，默认值为空，不包含逐项对象或时间戳；置顶数组把最近置顶的 id 放在前面。归档在同一次全局状态写入中清除置顶，但不改变 Workspace 成员关系。取消归档不做会话存在性探测，因为从集合中移除 id 不可能引入未知 id，而归档会在加入前校验会话。
 
 ### 生命周期
 
@@ -166,7 +168,7 @@ Workspace 注册不意味着拥有其目录。未来的破坏性文件系统操�
 
 这些限制说明项目列表何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是任务积压。
 
-- **移除绝不删除数据**——移除项目会保留其文件夹、文件与会话历史；这些会话变成 Ungrouped，而会话删除与文件夹移除是彼此独立且尚未提供的功能。
+- **移除项目绝不删除数据**——移除项目会保留其文件夹、文件与会话历史；这些会话变成 Ungrouped。永久删除会话是独立操作，不提供文件夹移除功能。
 - **路径缺失时保留记录归属，而非重新验证符号链接历史**——现有记录无法区分被移除的符号链接与错误但不存在的绝对 cwd；两者均保留已记账 id。此例外不吸收未记账会话，也不重建已经从存储中删除的归属。
 - **外部变更延迟可见**——如果另一进程删除或损坏目录，项目只能在下次刷新或重启后反映出来。
 - **归档与取消归档执行不同的会话校验**——恢复只是从归档集合中移除 id，因此会话已不存在的条目仍能取消归档，也不会留下未知引用；对未归档 id 执行恢复不写盘即完成，而 `archiveSession` 会拒绝既非实时也未持久化的会话。

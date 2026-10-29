@@ -2263,6 +2263,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the live Agent or the stable Session-domain failure.',
       },
       {
+        signature: 'deleteSession(sessionId: SessionId, authorize?: (id: SessionId) => boolean): Promise<void>',
+        description: 'Permanently delete a Session and all actual subagent descendants.',
+        parameters: [{ name: 'sessionId', description: 'root whose stored history and Workspace references are erased.' }, { name: 'authorize', description: 'per-target access decision captured by the calling Remote owner.' }],
+      },
+      {
         signature: '@Remote(\'list\') async list(_request: SessionListRequest, signal: AbortSignal): Promise<SessionListValue>',
         description: 'Read all visible Session rows without resuming an Agent.',
         parameters: [{ name: '_request', description: 'reserved empty list request.' }, { name: 'signal', description: 'cancellation for persistence reads and summary generation.' }],
@@ -2442,6 +2447,20 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
         returns: 'resolution once every write handle active at the call has flushed.',
         throws: ['{AggregateError} naming each session whose flush failed; the remaining handles still flush.'],
+      },
+      {
+        signature: 'delete(id: SessionId): Promise<boolean>',
+        description: 'Permanently remove one stored Session, including every physical generation. Refuses an active writer; callers must first stop and release their owned Agent. Read handles do not prevent deletion and may subsequently fail reads. Providers without deletion support reject without changing storage.',
+        parameters: [{ name: 'id', description: 'Session identity to erase; no descendants are deleted.' }],
+        returns: 'whether the Session existed and was removed.',
+        throws: ['{SessionAlreadyOwnedError} while any writer owns the Session.'],
+      },
+      {
+        signature: 'deleteMany(ids: readonly SessionId[]): Promise<readonly SessionId[]>',
+        description: 'Permanently remove a batch after acquiring exclusive ownership of every target. A refusal or preparation failure leaves all original logs in place. Providers without batch support reject without delegating to individual deletes.',
+        parameters: [{ name: 'ids', description: 'exact Session identities; duplicates are ignored.' }],
+        returns: 'identities that existed and were committed as removed.',
+        throws: ['{SessionAlreadyOwnedError} when any target has a writer.'],
       },
       {
         signature: 'abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined>',
@@ -3240,9 +3259,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{SubagentError} `UNAUTHORIZED` when the authority does not own the live target.'],
       },
       {
-        signature: 'async drainDescendants(parents: readonly Agent[]): Promise<void>',
+        signature: 'async drainDescendants(parents: readonly Agent[], options: { readonly idleOnly?: boolean } = {}): Promise<void>',
         description: 'Close subagent admission below exact live parent Agents, stop only their visible descendant Activations synchronously, then await admitted scoped materializations and release those forests child-first. The scoped cutoff lasts until each exact parent leaves the registry; unrelated parent trees remain live.',
-        parameters: [{ name: 'parents', description: 'exact host-owned parent Agents entering teardown.' }],
+        parameters: [{ name: 'parents', description: 'exact host-owned parent Agents entering teardown.' }, { name: 'options', description: 'idleOnly refuses active or starting descendants before stopping any work.' }],
         returns: 'once every retained descendant activation released its execution handle.',
         throws: ['an aggregate error after all branches settle when any failed.'],
       },
@@ -4071,6 +4090,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the complete resulting archive set.',
       },
       {
+        signature: '@Remote({ resources: { session: request => request.sessionId } }) async deleteSession(request: WorkspaceSessionDeleteRequest): Promise<void>',
+        description: 'Permanently delete a Session tree after access is checked on every member.',
+        parameters: [{ name: 'request', description: 'root whose actual subagent descendants are also erased.' }],
+      },
+      {
         signature: '@Remote(\'unarchiveSession\') unarchiveSession(request: WorkspaceUnarchiveSessionRequest): Promise<WorkspaceArchiveValue>',
         description: 'Restore one archived Session to Workspace grouping surfaces.',
         parameters: [{ name: 'request', description: 'Session identity to unarchive.' }],
@@ -4198,6 +4222,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Unpin one session durably by dropping it from the registry-global pin set. Unpinning runs no session-existence check because removing an id cannot introduce an unknown one, so an entry whose session is gone still resolves. An id that is not pinned resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to unpin.' }],
         returns: 'resolution after durability.',
+      },
+      {
+        signature: 'deleteSession(sessionId: SessionId, remove: () => Promise<void>): Promise<void>',
+        description: 'Delete one Session through the recoverable batch metadata operation.',
+        parameters: [{ name: 'sessionId', description: 'Session whose references are removed after storage commits.' }, { name: 'remove', description: 'lifecycle owner\'s storage commit.' }],
+      },
+      {
+        signature: 'deleteSessions(sessionIds: readonly SessionId[], remove: () => Promise<void>): Promise<void>',
+        description: 'Journal one complete Session tree and clear its references only after storage commits.',
+        parameters: [{ name: 'sessionIds', description: 'exact tree members; duplicates are ignored.' }, { name: 'remove', description: 'lifecycle owner that releases its Agents and commits the storage batch.' }],
       },
       {
         signature: 'async resolveByPath(path: string): Promise<Workspace | undefined>',
@@ -4355,10 +4389,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
   {
     name: 'api-session/removed',
     mode: 'emit',
-    signature: '\'api-session/removed\'(sessionId: SessionId): void',
-    summary: 'A Session left the live Host registry.',
-    description: 'A Session left the live Host registry.',
-    parameters: [{ name: 'sessionId', description: 'removed Session identity.' }],
+    signature: '\'api-session/removed\'(sessionId: SessionId, permanentlyDeleted?: true): void',
+    summary: 'A Session left the live registry or its stored history was permanently deleted.',
+    description: 'A Session left the live registry or its stored history was permanently deleted.',
+    parameters: [{ name: 'sessionId', description: 'removed Session identity.' }, { name: 'permanentlyDeleted', description: 'true only after storage deletion commits; omission is an ordinary unload.' }],
   },
   {
     name: 'api-session/status',
@@ -8282,7 +8316,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentRuntime',
-    declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async waitForChildren(parent: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    async drainChildren(parent: Agent, childIds: readonly SessionId[]): Promise<void>;\n    listChildren(parentSessionId: SessionId, signal?: AbortSignal): Promise<SubagentCatalogEntry[]>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote(\'prompt\')\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote(\'interruptByParent\')\n    interruptByParent(childSessionId: SessionId, parentSessionId: SessionId, mode: \'continuable\'): SubagentIn /* …truncated — full shape in source */',
+    declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    async waitForChildren(parent: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[], options: {\n        readonly idleOnly?: boolean;\n    } = {}): Promise<void>;\n    async drainChildren(parent: Agent, childIds: readonly SessionId[]): Promise<void>;\n    listChildren(parentSessionId: SessionId, signal?: AbortSignal): Promise<SubagentCatalogEntry[]>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote(\'prompt\')\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote(\'interruptByParent\')\n    interruptByParent(childSessionId: SessionId,  /* …truncated — full shape in source */',
   },
   {
     name: 'SubagentSendMessageOptions',
@@ -9271,6 +9305,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceRenameRequest',
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'WorkspaceSessionDeleteRequest',
+    declaration: 'export interface WorkspaceSessionDeleteRequest {\n    readonly sessionId: SessionId;\n}',
   },
   {
     name: 'WorkspaceUnarchiveSessionRequest',

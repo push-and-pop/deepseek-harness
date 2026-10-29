@@ -98,6 +98,8 @@ export class SessionManager {
    * holder, because it can arrive from a replaced or already-dropped Session.
    */
   private readonly engagedSessions = new Set<SessionId>()
+  /** Permanent identities stay retired across reconnects for this Client model lifetime. */
+  private readonly deletedSessions = new Set<SessionId>()
   private disposed = false
   /** Per-session projection value stores, retained independently of instance arrival (the
    *  title-snapshot precedent, generalized): push frames land here whether or not the Session
@@ -139,6 +141,8 @@ export class SessionManager {
    */
   resolveTarget(target: SessionTarget): SessionId {
     const id = typeof target === 'string' ? target : target.childSessionId
+    this.assertNotDeleted(id)
+    if (typeof target !== 'string') this.assertNotDeleted(target.parentSessionId)
     const address = typeof target === 'string' ? this.subagentAddress(id) : target
     if (typeof target === 'string'
       && !this.sessions.has(id)
@@ -163,9 +167,11 @@ export class SessionManager {
    *   from a listed subagent header; undefined without that evidence.
    */
   subagentAddress(sessionId: SessionId): SubagentAddress | undefined {
+    if (this.isDeleted(sessionId)) return undefined
     const retained = this.addresses.get(sessionId)
-    if (retained !== undefined) return retained
+    if (retained !== undefined) return this.isDeleted(retained.parentSessionId) ? undefined : retained
     for (const parentSessionId of this.projectionStores.keys()) {
+      if (this.isDeleted(parentSessionId)) continue
       const child = this.projectionStores.get(parentSessionId)?.values().subagentCatalog
         ?.find(entry => entry.id === sessionId)
       if (child !== undefined && child.mode !== 'external') {
@@ -177,12 +183,30 @@ export class SessionManager {
       }
     }
     const summary = this.summaries.find(summary => summary.sessionId === sessionId)
-    if (summary?.origin !== 'subagent' || summary.parentSessionId === undefined) return undefined
+    if (summary?.origin !== 'subagent' || summary.parentSessionId === undefined
+      || this.isDeleted(summary.parentSessionId)) return undefined
     return {
       parentSessionId: summary.parentSessionId,
       childSessionId: sessionId,
       mode: 'unknown',
     }
+  }
+
+  /**
+   * Whether this Client has observed a durable deletion, independently of unload or list membership.
+   * @param sessionId - identity being checked.
+   * @returns true until this Client model is disposed.
+   */
+  isDeleted(sessionId: SessionId): boolean {
+    return this.deletedSessions.has(sessionId)
+  }
+
+  /**
+   * Reject an explicitly retired identity before allocating a reference or scope.
+   * @param sessionId - identity requested by a consumer or Gateway.
+   */
+  assertNotDeleted(sessionId: SessionId): void {
+    if (this.isDeleted(sessionId)) throw new Error(`sessions.retain: session ${sessionId} was permanently deleted`)
   }
 
   // ---- Instance management ----
@@ -220,6 +244,7 @@ export class SessionManager {
     this.addresses.clear()
     for (const session of sessions) void this.startSessionDisposal(session)
     await this.drainSessionDisposals()
+    this.deletedSessions.clear()
   }
 
   private startSessionDisposal(session: Session): Promise<void> {
@@ -246,6 +271,7 @@ export class SessionManager {
    * @returns the resident instance.
    */
   get(sessionId: SessionId): Session {
+    this.assertNotDeleted(sessionId)
     let session = this.sessions.get(sessionId)
     if (session === undefined) {
       session = this.createSession(sessionId)
@@ -287,7 +313,7 @@ export class SessionManager {
       // The sender's local first-send flip mirrors into the list row so the
       // session surfaces (lists filter on blank) before any host frame lands.
       onEngaged: (engaged) => {
-        if (this.disposed || !this.retainedIds(this.summaries).has(engaged.sessionId)) return
+        if (this.disposed || this.isDeleted(engaged.sessionId) || !this.retainedIds(this.summaries).has(engaged.sessionId)) return
         // An identity already on the ledger needs no second row mutation.
         if (!this.engagedSessions.has(engaged.sessionId)) {
           this.engagedSessions.add(engaged.sessionId)
@@ -329,7 +355,13 @@ export class SessionManager {
   private projectionStore(sessionId: SessionId): ProjectionValueStore {
     let store = this.projectionStores.get(sessionId)
     if (store === undefined) {
-      store = new ProjectionValueStore()
+      store = new ProjectionValueStore((key, value) => {
+        if (this.isDeleted(sessionId)) return undefined
+        if (key !== 'subagentCatalog') return { value }
+        const catalog = value as SessionProjectionMap['subagentCatalog']
+        const kept = catalog.filter(child => !this.isDeleted(child.id))
+        return { value: kept.length === catalog.length ? catalog : kept }
+      })
       const projections = store
       store.subscribeAny(() => {
         // Newer history or control metadata corrects a resident Session's stale list hint.
@@ -349,6 +381,7 @@ export class SessionManager {
    * @returns completion of the current or newly started read.
    */
   refreshProjections(sessionId: SessionId): Promise<void> {
+    if (this.isDeleted(sessionId)) return Promise.resolve()
     const existing = this.projectionInflight.get(sessionId)
     if (existing !== undefined) return existing.promise
     if (this.projectionLoads.get(sessionId)?.state === 'ready') return Promise.resolve()
@@ -437,9 +470,9 @@ export class SessionManager {
             if (mutation.kind === 'remove') removedSincePull.add(mutation.sessionId)
           }
           for (const s of baseline) {
-            if (s.running && !removedSincePull.has(s.sessionId)) this.engagedSessions.add(s.sessionId)
+            if (!this.isDeleted(s.sessionId) && s.running && !removedSincePull.has(s.sessionId)) this.engagedSessions.add(s.sessionId)
           }
-          const summaries = mutations.reduce(applyMutation, baseline)
+          const summaries = mutations.reduce(applyMutation, baseline).filter(summary => !this.isDeleted(summary.sessionId))
           this.summaries = summaries
           // A full list can remove identities without a removal frame.
           const retained = this.retainedIds(summaries)
@@ -497,7 +530,7 @@ export class SessionManager {
     return {
       ok: true,
       value: {
-        items: [...result.value.items],
+        items: result.value.items.filter(item => !this.isDeleted(item.sessionId)),
         hasMore: result.value.hasMore,
       },
     }
@@ -587,7 +620,7 @@ export class SessionManager {
    */
   async rename(sessionId: SessionId, title: string): Promise<RemoteResult<SessionRenameValue>> {
     const result = await this.remote.session.rename({ sessionId, title })
-    if (result.ok) {
+    if (result.ok && !this.isDeleted(sessionId)) {
       this.projectionStore(sessionId).apply('title', result.value.title, SessionSeq(result.value.seq))
     }
     return result
@@ -605,6 +638,8 @@ export class SessionManager {
   /** Apply immediately and retain for replay when a list response is in flight. */
   private recordMutation(mutation: SessionListMutation): void {
     if (this.disposed) return
+    const id = 'summary' in mutation ? mutation.summary.sessionId : mutation.sessionId
+    if (mutation.kind !== 'remove' && this.isDeleted(id)) return
     this.listMutations?.push(mutation)
     this.summaries = applyMutation(this.summaries, mutation)
     this.notifier.markDirty()
@@ -650,6 +685,7 @@ export class SessionManager {
       this.replaceControlBaseline(frame.value)
       return
     }
+    if (this.isDeleted(frame.sessionId)) return
     this.projectionStore(frame.sessionId).apply(frame.key, frame.value, SessionSeq(frame.seq))
     this.notifier.markDirty()
   }
@@ -657,6 +693,7 @@ export class SessionManager {
   private replaceControlBaseline(baseline: SessionControlBaseline): void {
 
     for (const [sessionId, block] of Object.entries(baseline.projections)) {
+      if (this.isDeleted(sessionId as SessionId)) continue
       const store = this.projectionStore(sessionId as SessionId)
       const asOfSeq = sessionSeqCursor(block.asOfSeq)
       store.seed({ ...block, asOfSeq })
@@ -669,6 +706,7 @@ export class SessionManager {
    * @param summary - current Host summary for the added Session.
    */
   handleSessionAdded(summary: SessionSummary): void {
+    if (this.isDeleted(summary.sessionId)) return
     this.mergeSummary(summary)
     if (!this.disposed && summary.running) this.engagedSessions.add(summary.sessionId)
     this.sessions.get(summary.sessionId)?.handleBlank(this.effectiveBlank(summary))
@@ -684,6 +722,7 @@ export class SessionManager {
    * this connection's seqs, so it only fills keys no sequenced row holds.
    */
   private applyListBlock(sessionId: SessionId, block: SessionProjectionHints): void {
+    if (this.isDeleted(sessionId)) return
     const store = this.projectionStore(sessionId)
     switch (block.kind) {
       case 'sequenced': {
@@ -702,8 +741,27 @@ export class SessionManager {
   /**
    * Apply one Session removal forwarded through `ctx.remote.$on`.
    * @param sessionId - removed Session identity.
+   * @param permanentlyDeleted - true only after durable storage deletion, never ordinary Agent unload.
    */
-  handleSessionRemoved(sessionId: SessionId): void {
+  handleSessionRemoved(sessionId: SessionId, permanentlyDeleted?: true): void {
+    if (permanentlyDeleted === true) {
+      this.deletedSessions.add(sessionId)
+      this.recordMutation({ kind: 'remove', sessionId })
+      this.engagedSessions.delete(sessionId)
+      this.addresses.delete(sessionId)
+      this.projectionInflight.get(sessionId)?.controller.abort()
+      this.projectionInflight.delete(sessionId)
+      this.projectionLoads.delete(sessionId)
+      const store = this.projectionStores.get(sessionId)
+      this.projectionStores.delete(sessionId)
+      store?.clear()
+      for (const parent of this.projectionStores.values()) parent.reconcile()
+      this.sessions.get(sessionId)?.handleRunning(false)
+      this.sessions.get(sessionId)?.handleRemoved()
+      this.updateParentAvailability()
+      return
+    }
+    if (this.isDeleted(sessionId)) return
     const durableSubagent = this.subagentAddress(sessionId) !== undefined
       || this.summaries.some(summary => summary.sessionId === sessionId && summary.origin === 'subagent')
     this.recordMutation(durableSubagent
@@ -732,6 +790,7 @@ export class SessionManager {
    * @param running - current Agent running state.
    */
   handleSessionStatus(sessionId: SessionId, running: boolean): void {
+    if (this.isDeleted(sessionId)) return
     if (!this.disposed && running) this.engagedSessions.add(sessionId)
     this.recordMutation({ kind: 'status', sessionId, running, agentAvailable: true })
     this.updateParentAvailability()

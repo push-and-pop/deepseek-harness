@@ -80,6 +80,10 @@ The current-generation scanner applies the current codec owner’s structural ad
 
 Unloading the backend waits for the consumer unloads it triggers through `sessionPersistence` injection before removing live-event listeners and draining and closing remaining handles. Consumers must register cleanup in that injecting scope; unrelated scopes and explicit Session or handle closure have their own lifetimes. Programmatic mounting uses the plugin namespace (`import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'`) with `ctx.plugin`; access storage through `ctx.sessionPersistence`.
 
+### Deleting a Session
+
+`ctx.sessionPersistence.delete(id)` takes exclusive writer ownership and a cross-process lease, then atomically moves the target Session directory out of discovery before removing it. All format generations move together, so deleting the current generation cannot expose an older history. No descendant Session or Workspace file is deleted. An active writer refuses deletion; read handles do not prevent it and may fail subsequent reads.
+
 ### Reading the logs
 
 Materialized `stat` and `list` snapshots include the format catalog's header classification as `formatStatus`, alongside the translated logical `header`. They also include `location: { kind: 'jsonl', path }` for the selected physical generation. A read-only preparation leaves the selected historical version unchanged; the status becomes `current` after publication of the successor. Unmaterialized pending Sessions omit `formatStatus` and `location`.
@@ -164,7 +168,7 @@ These limits define when this backend is a poor fit or needs special operational
 - **Format migration preserves the configured encoding and supports only the catalogued chain** — this build migrates supported historical generations to the current format; changing compression requires a separate root, and retained predecessors do not provide automatic fallback or downgrade support.
 - **The flat-file storage layout does not load** — use a separate root or move pre-release artifacts into the project/session directory layout before loading.
 - **Compressed files are not directly line-readable** — use the backend to load them, or select `compression: 'none'` before writing a fresh root when external line readers are required.
-- **Nothing deletes session files** — logs accumulate under `root` until removed externally; the seam has no deletion API.
+- **No automatic retention policy** — logs remain under `root` until explicitly deleted.
 - **One live writer per session** — the write-handle claim excludes a second writer inside the owning backend instance, and a kernel lock (non-blocking `flock(2)` on `session.lock`; on Windows a named kernel semaphore derived from that path, with no filesystem footprint) excludes every other instance and process; the lock is taken at write-open of an existing artifact and, for a created session, only right before its first materializing write, so an unmaterialized session leaves no filesystem footprint. A crashed holder's lock dies with its process, so its session is writable again immediately, while a live-but-wedged holder blocks writers until its process exits (on POSIX, removing the lock file forfeits that exclusion; release itself never removes it). Advisory `flock` is unreliable on some network filesystems (NFSv3), and the Windows semaphore name is per login session.
 - **Concurrent root disposal is not ordered** — Cordis can remove already-disposing consumers from its registry before the provider can join their cleanup. Dependency ordering here covers consumer unloads triggered by removing this provider.
 - **POSIX materialization requires hard-link support** — first append uses `link()` so same-id races fail instead of overwriting a committed log; Windows uses write-through rename without replacement.

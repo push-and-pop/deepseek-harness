@@ -141,6 +141,7 @@ export class SessionController extends TypertRemoteService {
     'llm',
     'remoteAccess',
     'sessions',
+    'sessionPersistence',
     'sessionProjections',
     'sessionQuery',
     'typert',
@@ -254,6 +255,15 @@ export class SessionController extends TypertRemoteService {
    */
   resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult> {
     return this.agents.resolveAgent(sessionId)
+  }
+
+  /**
+   * Permanently delete a Session and all actual subagent descendants.
+   * @param sessionId - root whose stored history and Workspace references are erased.
+   * @param authorize - per-target access decision captured by the calling Remote owner.
+   */
+  deleteSession(sessionId: SessionId, authorize?: (id: SessionId) => boolean): Promise<void> {
+    return this.agents.deleteSession(sessionId, authorize)
   }
 
   /**

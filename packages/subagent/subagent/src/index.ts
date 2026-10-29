@@ -370,14 +370,15 @@ export class SubagentRuntime extends TypertRemoteService {
    * lasts until each exact parent leaves the registry; unrelated parent trees
    * remain live.
    * @param parents - exact host-owned parent Agents entering teardown.
+   * @param options - idleOnly refuses active or starting descendants before stopping any work.
    * @returns once every retained descendant activation released its execution handle.
    * @throws an aggregate error after all branches settle when any failed.
    */
-  async drainDescendants(parents: readonly Agent[]): Promise<void> {
+  async drainDescendants(parents: readonly Agent[], options: { readonly idleOnly?: boolean } = {}): Promise<void> {
     const manager = this.manager
     // An absent activation manager cannot own materialized children.
     if (manager === undefined) return
-    await manager.drainDescendants(parents)
+    await manager.drainDescendants(parents, options)
   }
 
   /**

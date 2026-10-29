@@ -6,6 +6,16 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'delete.session.desc': '确定永久删除“{title}”及其全部子会话的记录和会话存储文件吗？此操作无法撤销，工作区里的代码、文档和生成文件均会保留。任何会话仍有运行任务时无法删除。',
+  'delete.session.children': '无法安全删除此会话及其子会话，请停止相关工作后重试。',
+  'delete.session.busy': '此会话或其子会话仍有运行任务或正被其他功能使用，请停止任务后重试。',
+  'delete.session.writerHeld': '此会话或其子会话正被其他进程占用，请关闭相关会话后重试。',
+  'delete.session.notFound': '会话已不存在，请关闭此对话框并刷新会话列表。',
+  'menu.deleteSession': '删除会话',
+  'delete.session.title': '删除此会话？',
+  'delete.session.action': '确认删除',
+  'delete.session.pending': '正在删除会话…',
+  'delete.session.failed': '删除失败：{message}',
   'defaultWorkspace.failed': '无法创建默认工作区，请通过“选择工作区”选择文件夹',
   'draft.workspaceRequired': '请先选择工作区',
   'draft.initializationFailed': '暂时无法填入草稿，请稍后重试',
@@ -132,6 +142,16 @@ export type WorkspaceKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'delete.session.desc': 'Permanently delete “{title}” and all its child sessions, including their records and session storage files? This cannot be undone. Workspace code, documents, and generated files will remain. No session in this tree may have running work.',
+  'delete.session.children': 'This session tree cannot be safely deleted. Stop its work and try again.',
+  'delete.session.busy': 'This session or a child session has running work or is in use. Stop that work and try again.',
+  'delete.session.writerHeld': 'Another process is writing to this session or a child session. Close the affected sessions there and try again.',
+  'delete.session.notFound': 'This session no longer exists. Close this dialog and refresh the session list.',
+  'menu.deleteSession': 'Delete session',
+  'delete.session.title': 'Delete this session?',
+  'delete.session.action': 'Confirm deletion',
+  'delete.session.pending': 'Deleting session…',
+  'delete.session.failed': 'Deletion failed: {message}',
   'defaultWorkspace.failed': 'Unable to create default workspace. Use Choose workspace to select a folder.',
   'draft.workspaceRequired': 'Choose a workspace first.',
   'draft.initializationFailed': 'Could not fill the draft. Please try again shortly.',
@@ -255,6 +275,16 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'delete.session.desc': '「{title}」とすべての子セッションの記録および保存ファイルを完全に削除しますか？この操作は元に戻せません。ワークスペースのコード、文書、生成ファイルは保持されます。実行中の作業がある場合は削除できません。',
+  'delete.session.children': 'このセッションと子セッションを安全に削除できません。作業を停止して再試行してください。',
+  'delete.session.busy': 'このセッションまたは子セッションに実行中の作業があるか、使用中です。作業を停止して再試行してください。',
+  'delete.session.writerHeld': '別のプロセスがこのセッションまたは子セッションに書き込み中です。そちらで閉じて再試行してください。',
+  'delete.session.notFound': 'このセッションは存在しません。ダイアログを閉じて一覧を更新してください。',
+  'menu.deleteSession': 'セッションを削除',
+  'delete.session.title': 'このセッションを削除しますか？',
+  'delete.session.action': '削除を確認',
+  'delete.session.pending': 'セッションを削除中…',
+  'delete.session.failed': '削除に失敗しました：{message}',
   'defaultWorkspace.failed': 'デフォルトのワークスペースを作成できません。ワークスペースを選択してフォルダーを選んでください。',
   'draft.workspaceRequired': '先にワークスペースを選択してください。',
   'draft.initializationFailed': '下書きを埋め込めませんでした。しばらくしてからもう一度お試しください。',
@@ -378,6 +408,16 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'delete.session.desc': '¿Eliminar permanentemente «{title}» y todas sus sesiones secundarias, incluidos sus registros y archivos de sesión? Esta acción no se puede deshacer. Se conservarán el código, los documentos y los archivos generados del espacio de trabajo. Ninguna sesión del árbol puede tener tareas en ejecución.',
+  'delete.session.children': 'No se puede eliminar este árbol de sesiones de forma segura. Detén sus tareas e inténtalo de nuevo.',
+  'delete.session.busy': 'Esta sesión o una sesión secundaria está en uso o tiene tareas en ejecución. Detén las tareas e inténtalo de nuevo.',
+  'delete.session.writerHeld': 'Otro proceso está escribiendo en esta sesión o en una sesión secundaria. Ciérralas allí e inténtalo de nuevo.',
+  'delete.session.notFound': 'Esta sesión ya no existe. Cierra este diálogo y actualiza la lista.',
+  'menu.deleteSession': 'Eliminar sesión',
+  'delete.session.title': '¿Eliminar esta sesión?',
+  'delete.session.action': 'Confirmar eliminación',
+  'delete.session.pending': 'Eliminando sesión…',
+  'delete.session.failed': 'Error al eliminar: {message}',
   'defaultWorkspace.failed': 'No se puede crear el espacio de trabajo predeterminado. Utilice Elegir espacio de trabajo para seleccionar una carpeta.',
   'draft.workspaceRequired': 'Elija un espacio de trabajo primero.',
   'draft.initializationFailed': 'No se pudo completar el borrador. Inténtelo de nuevo en breve.',
@@ -501,6 +541,16 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'delete.session.desc': 'Supprimer définitivement « {title} » et toutes ses sessions enfants, y compris leurs historiques et fichiers de session ? Cette action est irréversible. Le code, les documents et les fichiers générés de l’espace de travail seront conservés. Aucune session de cet arbre ne doit avoir de tâche en cours.',
+  'delete.session.children': 'Cet arbre de sessions ne peut pas être supprimé en toute sécurité. Arrêtez ses tâches, puis réessayez.',
+  'delete.session.busy': 'Cette session ou une session enfant est utilisée ou contient des tâches en cours. Arrêtez-les, puis réessayez.',
+  'delete.session.writerHeld': 'Un autre processus écrit dans cette session ou une session enfant. Fermez-les dans ce processus, puis réessayez.',
+  'delete.session.notFound': 'Cette session n’existe plus. Fermez cette boîte de dialogue et actualisez la liste.',
+  'menu.deleteSession': 'Supprimer la session',
+  'delete.session.title': 'Supprimer cette session ?',
+  'delete.session.action': 'Confirmer la suppression',
+  'delete.session.pending': 'Suppression de la session…',
+  'delete.session.failed': 'Échec de la suppression : {message}',
   'defaultWorkspace.failed': 'Impossible de créer un espace de travail par défaut. Utilisez Choisir un espace de travail pour sélectionner un dossier.',
   'draft.workspaceRequired': "Choisissez d'abord un espace de travail.",
   'draft.initializationFailed': 'Impossible de remplir le projet. Veuillez réessayer sous peu.',
@@ -624,6 +674,16 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'delete.session.desc': '„{title}“ und alle untergeordneten Sitzungen samt Verlauf und Sitzungsdateien dauerhaft löschen? Dies kann nicht rückgängig gemacht werden. Code, Dokumente und erzeugte Dateien des Arbeitsbereichs bleiben erhalten. Keine Sitzung dieses Baums darf laufende Aufgaben haben.',
+  'delete.session.children': 'Dieser Sitzungsbaum kann nicht sicher gelöscht werden. Beenden Sie seine Aufgaben und versuchen Sie es erneut.',
+  'delete.session.busy': 'Diese Sitzung oder eine untergeordnete Sitzung wird verwendet oder hat laufende Aufgaben. Beenden Sie diese und versuchen Sie es erneut.',
+  'delete.session.writerHeld': 'Ein anderer Prozess schreibt in diese Sitzung oder eine untergeordnete Sitzung. Schließen Sie die betroffenen Sitzungen dort und versuchen Sie es erneut.',
+  'delete.session.notFound': 'Diese Sitzung existiert nicht mehr. Schließen Sie den Dialog und aktualisieren Sie die Liste.',
+  'menu.deleteSession': 'Sitzung löschen',
+  'delete.session.title': 'Diese Sitzung löschen?',
+  'delete.session.action': 'Löschen bestätigen',
+  'delete.session.pending': 'Sitzung wird gelöscht…',
+  'delete.session.failed': 'Löschen fehlgeschlagen: {message}',
   'defaultWorkspace.failed': 'Der Standardarbeitsbereich kann nicht erstellt werden. Verwenden Sie „Arbeitsbereich auswählen“, um einen Ordner auszuwählen.',
   'draft.workspaceRequired': 'Wählen Sie zunächst einen Arbeitsbereich.',
   'draft.initializationFailed': 'Der Entwurf konnte nicht ausgefüllt werden. Bitte versuchen Sie es in Kürze noch einmal.',
@@ -747,6 +807,16 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'delete.session.desc': 'Навсегда удалить «{title}» и все дочерние сеансы, включая историю и файлы сеансов? Это действие нельзя отменить. Код, документы и созданные файлы рабочей области сохранятся. Ни в одном сеансе дерева не должно быть выполняющихся задач.',
+  'delete.session.children': 'Это дерево сеансов нельзя безопасно удалить. Остановите его задачи и повторите попытку.',
+  'delete.session.busy': 'Этот или дочерний сеанс используется либо содержит выполняющиеся задачи. Остановите их и повторите попытку.',
+  'delete.session.writerHeld': 'Другой процесс записывает данные в этот или дочерний сеанс. Закройте соответствующие сеансы там и повторите попытку.',
+  'delete.session.notFound': 'Этот сеанс больше не существует. Закройте диалог и обновите список.',
+  'menu.deleteSession': 'Удалить сеанс',
+  'delete.session.title': 'Удалить этот сеанс?',
+  'delete.session.action': 'Подтвердить удаление',
+  'delete.session.pending': 'Удаление сеанса…',
+  'delete.session.failed': 'Не удалось удалить: {message}',
   'defaultWorkspace.failed': 'Невозможно создать рабочую область по умолчанию. Используйте «Выбрать рабочее пространство», чтобы выбрать папку.',
   'draft.workspaceRequired': 'Сначала выберите рабочее место.',
   'draft.initializationFailed': 'Не удалось заполнить черновик. Пожалуйста, повторите попытку в ближайшее время.',
@@ -870,6 +940,16 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'delete.session.desc': 'Excluir permanentemente “{title}” e todas as sessões filhas, incluindo os históricos e arquivos de sessão? Esta ação não pode ser desfeita. O código, os documentos e os arquivos gerados do espaço de trabalho serão mantidos. Nenhuma sessão da árvore pode ter tarefas em execução.',
+  'delete.session.children': 'Esta árvore de sessões não pode ser excluída com segurança. Pare as tarefas e tente novamente.',
+  'delete.session.busy': 'Esta sessão ou uma sessão filha está em uso ou tem tarefas em execução. Pare as tarefas e tente novamente.',
+  'delete.session.writerHeld': 'Outro processo está gravando nesta sessão ou em uma sessão filha. Feche as sessões afetadas nesse processo e tente novamente.',
+  'delete.session.notFound': 'Esta sessão não existe mais. Feche este diálogo e atualize a lista.',
+  'menu.deleteSession': 'Excluir sessão',
+  'delete.session.title': 'Excluir esta sessão?',
+  'delete.session.action': 'Confirmar exclusão',
+  'delete.session.pending': 'Excluindo sessão…',
+  'delete.session.failed': 'Falha ao excluir: {message}',
   'defaultWorkspace.failed': 'Não foi possível criar o espaço de trabalho padrão. Use Escolher espaço de trabalho para selecionar uma pasta.',
   'draft.workspaceRequired': 'Escolha um espaço de trabalho primeiro.',
   'draft.initializationFailed': 'Não foi possível preencher o rascunho. Por favor, tente novamente em breve.',

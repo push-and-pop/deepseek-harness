@@ -33,7 +33,7 @@ seam 随产品交付 [JSONL](../session-persistence-jsonl/README.zh.md) 后端�
 
 ### 服务提供什么
 
-挂载后端后，五个服务方法寻址已存储会话：
+挂载后端后，服务通过以下方法寻址已存储会话：
 
 ```text
 const handle = await ctx.sessionPersistence.create(header)     // store a new session, take write ownership
@@ -42,7 +42,10 @@ const reader = await ctx.sessionPersistence.open(id, 'read')   // observe withou
 const snap = await ctx.sessionPersistence.stat(id)             // header + revision (+ eventCount / sizeBytes) without a log read
 const all = await ctx.sessionPersistence.list()                // one snapshot per visible stored session
 await ctx.sessionPersistence.flush()                           // backend-wide durability barrier over every active write handle
+const removed = await ctx.sessionPersistence.delete(id)         // permanently remove only this Session and every stored generation
 ```
+
+`delete(id)` 返回已存储的会话是否存在且已被移除。存在活动写入方时以 `SessionAlreadyOwnedError` 拒绝；调用方必须先停止并释放自身持有的 Agent。读句柄不阻止删除，后续读取可能失败。不支持删除的提供方会拒绝操作且不改变存储。生命周期安全检查由 [Session Controller](../../api/session-controller/README.zh.md) 负责，不属于此存储方法。
 
 服务级 `flush()` 排空每个活跃写句柄已路由的事件并把其会话实体化，效果与各句柄自己的 `flush` 完全相同；失败按会话聚合为一个 `AggregateError` 而不中途放弃清扫，清扫途中被关闭的句柄视同已 flush，因为 close 本身会持久排空。
 
@@ -150,7 +153,7 @@ seam 不添加提示词或 schema。恢复会将已存储的表层事件还原�
 - **seam 只保证单个后端实例内的写所有权**——跨进程排他由具体提供方负责。随产品交付的 JSONL 提供方通过内核锁在不同实例和进程之间提供租约；其他提供方必须记录等效保证，或要求部署方阻止并发写入。
 - **在有活跃会话时重载后端插件会使其写入器明确报错**——重载后的后端无法服务旧实例签发的句柄；写入会持续失败直到会话重启，没有任何机制静默重新接管日志。
 - **只有通过句柄获取的会话才会持久化**——仅靠 `ctx.sessions.create` + `session/flush` 不存储任何内容；agent-loop 是生产环境的获取点，测试通过 `create`/`append`/`close` 写入初始存储数据。
-- **无删除或保留接口**——剪枝已存储会话属于带外后端维护。
+- **无自动保留策略**——删除需要显式调用，且要求提供方支持。
 - **`list()` 无分页且无过滤**——它返回每个已存储会话的快照；适合本地存储，大规模时无索引。
 - **合成 closer 是唯一崩溃方案**——恢复通过写句柄追加 `interruptedTurnClosers`；没有继续中断轮次而不先关闭它的部分轮次恢复。
 

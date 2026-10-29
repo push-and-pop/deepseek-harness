@@ -375,6 +375,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'sessionId', description: 'Session to unarchive.' }],
       },
       {
+        signature: 'deleteSession(sessionId: SessionId): Promise<void>',
+        description: 'Delete a Session after user confirmation; clear selection only after Host acceptance.',
+        parameters: [{ name: 'sessionId', description: 'Session to permanently delete.' }],
+      },
+      {
         signature: 'pickDirectory(): Promise<string | null>',
         description: 'Open the Host-native directory picker.',
         parameters: [],
@@ -426,6 +431,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'unarchiveSession(sessionId: SessionId): Promise<void>',
         description: 'Unarchive a Session from the archived Session list.',
         parameters: [{ name: 'sessionId', description: 'Session to unarchive.' }],
+      },
+      {
+        signature: 'deleteSession(sessionId: SessionId): Promise<void>',
+        description: 'Permanently delete a Session and its entire subagent descendant tree.',
+        parameters: [{ name: 'sessionId', description: 'root whose Session storage and Workspace references are erased with its descendants.' }],
+        throws: ['{WorkspaceSessionDeleteError} when any tree member is busy, unauthorized, owned elsewhere, or cannot be safely deleted.'],
       },
       {
         signature: 'insertSessionBefore( workspaceId: WorkspaceId, sessionId: SessionId, beforeSessionId?: SessionId, ): Promise<WorkspaceView>',

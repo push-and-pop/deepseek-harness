@@ -14,7 +14,7 @@ import {
   sessionFormatCatalog,
 } from '@deepseek-ai/dsh-session-format-catalog'
 import { readdirSync, type Dirent } from 'node:fs'
-import { open, mkdir, readdir, realpath, link, rm, stat, truncate } from 'node:fs/promises'
+import { open, mkdir, readdir, realpath, link, lstat, rename, rm, stat, truncate } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { scheduler } from 'node:timers/promises'
@@ -427,6 +427,9 @@ class JsonlSessionPersistence extends SessionPersistence {
       if (resolved === undefined) throw new SessionPersistenceNotFoundError(id)
       lease = await this.acquireLease(id, undefined, dirname(resolved.currentPath))
       const prepared = await this.requireStoredLog(id, options?.signal)
+      if (sessionDir(this.root, prepared.meta.cwd, id) !== dirname(resolved.currentPath)) {
+        throw new Error(`session "${id}" moved while acquiring its writer`)
+      }
       options?.signal?.throwIfAborted()
       let stored: CurrentStoredLog
       if (prepared.status === 'prepared') {
@@ -561,6 +564,89 @@ class JsonlSessionPersistence extends SessionPersistence {
     }
     signal?.throwIfAborted()
     return snapshots
+  }
+
+  /** Remove one Session through the same all-target ownership transaction as a batch. */
+  override async delete(id: SessionId): Promise<boolean> {
+    return (await this.deleteMany([id])).includes(id)
+  }
+
+  /** Acquire every writer lease before isolating any complete Session directory. */
+  override async deleteMany(ids: readonly SessionId[]): Promise<readonly SessionId[]> {
+    const claimed: SessionId[] = []
+    const selected: { id: SessionId; directory: string; lease: SessionWriteLease; removed?: string }[] = []
+    let committed = false
+    try {
+      for (const id of [...new Set(ids)].sort()) {
+        this.tracker.claimWrite(id)
+        claimed.push(id)
+      }
+      for (const id of claimed) {
+        const stored = await this.findLog(id)
+        if (stored === undefined) continue
+        const directory = dirname(stored.sourcePath)
+        if (!(await lstat(directory)).isDirectory()) throw new Error(`refusing to delete linked Session directory "${directory}"`)
+        const lease = await this.acquireLease(id, undefined, directory)
+        selected.push({ id, directory, lease })
+        const current = await this.findLog(id)
+        if (current === undefined || dirname(current.sourcePath) !== directory) {
+          throw new Error(`session "${id}" moved while acquiring deletion ownership`)
+        }
+      }
+      if (selected.length === 0) return []
+      const trash = join(this.root, '_deleted')
+      await mkdir(trash, { recursive: true, mode: 0o700 })
+      if (!(await lstat(trash)).isDirectory()) throw new Error(`invalid Session deletion directory "${trash}"`)
+      try {
+        for (const entry of selected) {
+          const removed = join(trash, randomBytes(16).toString('hex'))
+          await rename(entry.directory, removed)
+          entry.removed = removed
+        }
+      } catch (error) {
+        const failures: unknown[] = [error]
+        for (const entry of [...selected].reverse()) {
+          if (entry.removed === undefined) continue
+          try {
+            // Never replace a same-id directory a foreign creator published meanwhile.
+            try {
+              await lstat(entry.directory)
+              throw new Error(`cannot restore Session directory already present: ${entry.directory}`)
+            } catch (probeError) {
+              if (!(probeError instanceof Error) || !('code' in probeError) || probeError.code !== 'ENOENT') throw probeError
+            }
+            await rename(entry.removed, entry.directory)
+            delete entry.removed
+          } catch (restoreError) {
+            failures.push(restoreError)
+          }
+        }
+        if (failures.length > 1) throw new AggregateError(failures, 'Session deletion preparation and rollback failed; isolated logs were retained')
+        throw error
+      }
+      committed = true
+      for (const entry of selected) this.coldLogMemo.delete(entry.id)
+      return selected.map(entry => entry.id)
+    } finally {
+      const failures: unknown[] = []
+      for (const entry of [...selected].reverse()) {
+        try { await entry.lease.release() } catch (error) { failures.push(error) }
+      }
+      for (const id of claimed) this.tracker.releaseClaim(id)
+      if (committed) {
+        for (const entry of selected) {
+          try {
+            if (entry.removed === undefined) throw new Error('committed Session deletion has no isolated directory')
+            await rm(entry.removed, { recursive: true, force: true })
+          } catch (error) {
+            this.ctx.logger.warn('Session batch deletion committed; residual artifacts remain at %s: %s', entry.removed, error)
+          }
+        }
+        for (const error of failures) this.ctx.logger.warn('Session batch deletion committed but lock release failed: %s', error)
+      } else if (failures.length > 0) {
+        this.ctx.logger.warn('Session batch deletion was refused; lock release failed: %s', new AggregateError(failures))
+      }
+    }
   }
 
   // --- handle-facing storage internals (package-private via the handle class below) ---
@@ -1673,7 +1759,7 @@ class JsonlSessionPersistence extends SessionPersistence {
       signal?.throwIfAborted()
       const entries = await readdir(this.root, { withFileTypes: true })
       signal?.throwIfAborted()
-      return entries.filter(e => e.isDirectory()).map(e => join(this.root, e.name))
+      return entries.filter(e => e.isDirectory() && e.name !== '_deleted').map(e => join(this.root, e.name))
     } catch (error) {
       // Only an absent root means no sessions; rethrow every other I/O failure.
       if (isENOENT(error)) return []

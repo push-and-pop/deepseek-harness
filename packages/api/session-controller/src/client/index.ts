@@ -1,6 +1,7 @@
 /** Client Session object layer, Agent scopes, and Remote lifecycle wiring. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-agent/types'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-file-upload/client'
@@ -92,6 +93,14 @@ declare module '@deepseek-ai/cordis' {
     /** Client Session object layer and Agent scope owner. */
     sessions: import('./contract/sessions.ts').ISessions
   }
+  interface Events {
+    /**
+     * A Host-confirmed durable deletion has been applied to the Client catalog.
+     * @param sessionId - permanently deleted identity, including a deleted child.
+     * @mode emit
+     */
+    'sessions/deleted'(sessionId: SessionId): void
+  }
 }
 
 /** Required Remote and Context projection services. */
@@ -114,7 +123,7 @@ export function apply(ctx: Context): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const sessions = new ClientSessions(ctx, remotes)
   ctx.remote.$on('api-session/added', (summary) => { sessions.handleSessionAdded(summary) })
-  ctx.remote.$on('api-session/removed', (sessionId) => { sessions.handleSessionRemoved(sessionId) })
+  ctx.remote.$on('api-session/removed', (sessionId, permanentlyDeleted?: true) => { sessions.handleSessionRemoved(sessionId, permanentlyDeleted) })
   ctx.remote.$on('api-session/status', (sessionId, running) => {
     sessions.handleSessionStatus(sessionId, running)
   })

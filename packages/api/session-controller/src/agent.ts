@@ -3,12 +3,14 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentSetup } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { Session, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-subagent'
+import type {} from '@deepseek-ai/dsh-api-remote-access'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-typert-registry'
@@ -124,6 +126,8 @@ export function apiSessionSubagentOwnershipError(sessionId: SessionId): ApiSessi
 
 /** Owns every operation that may create, resume, or configure a Web Agent. */
 export class ApiSessionAgentController {
+  private readonly ownedHandles = new Map<SessionId, AgentHandle>()
+  private readonly deleting = new Set<SessionId>()
   private readonly resumes = new Map<SessionId, Promise<Agent>>()
   private readonly claims = new Map<SessionId, Promise<void>>()
   private readonly imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
@@ -136,6 +140,9 @@ export class ApiSessionAgentController {
    */
   initialize(): void {
     const ctx = this.ctx
+    ctx.on('agent/disposed', ({ agent }) => {
+      if (this.ownedHandles.get(agent.id)?.agent === agent) this.ownedHandles.delete(agent.id)
+    })
     ctx.typert.lookups.configure('agent', async (sessionId: SessionId) => {
       const found = await this.resolveAgent(sessionId)
       if ('error' in found) throw found.error
@@ -175,6 +182,9 @@ export class ApiSessionAgentController {
     sessionId: SessionId,
     observation?: SessionObservation,
   ): Promise<ApiSessionAgentResult> {
+    if (this.deleting.has(sessionId)) return {
+      error: new RemoteError('session/agent-busy', `session "${sessionId}" is being deleted`, { reason: 'deletion in progress' }),
+    }
     const live = this.liveAgent(sessionId)
     if (live !== undefined) return live
     const attached = this.ctx.sessions.get(sessionId)
@@ -238,6 +248,7 @@ export class ApiSessionAgentController {
    */
   async createSession(request: ApiSessionCreateRequest): Promise<ApiSessionCreated> {
     const named = request.sessionId
+    if (named !== undefined && this.deleting.has(named)) throw this.deleteBusy(named)
     if (named === undefined) return this.created(await this.createMinted(request.cwd, await this.composeAgent(request.agentPreset)))
     return this.inOrder(named, async () => this.created(await this.claim(named, request)))
   }
@@ -321,11 +332,11 @@ export class ApiSessionAgentController {
     if (published !== undefined && hasApiSessionSubagentOwner(this.ctx, published, live)) {
       throw new ApiSessionSubagentOwnership(sessionId)
     }
-    return (await this.ctx.agents.resume({
+    return this.own(await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: this.agentOptions(),
       setup: composition.setup,
-    })).agent
+    }))
   }
 
   private async inOrder<Value>(sessionId: SessionId, operation: () => Promise<Value>): Promise<Value> {
@@ -375,11 +386,11 @@ export class ApiSessionAgentController {
     if (!reusable) return this.createMinted(request.cwd, composition)
     this.assertPresetApplicable(sessionId, request.agentPreset)
     try {
-      return (await this.ctx.agents.resume({
+      return this.own(await this.ctx.agents.resume({
         resumeSessionId: sessionId,
         agentOptions: this.agentOptions(),
         setup: this.reuseSetup(composition),
-      })).agent
+      }))
     } catch (error: unknown) {
       if (error instanceof ApiSessionStartedSinceObserved) return this.createMinted(request.cwd, composition)
       if (!(error instanceof Error) || error.name !== 'SessionAlreadyOwnedError') throw error
@@ -450,7 +461,7 @@ export class ApiSessionAgentController {
     } catch (error: unknown) {
       throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
     }
-    return (await this.ctx.agents.create({
+    return this.own(await this.ctx.agents.create({
       sessionId,
       agentOptions: this.agentOptions(),
       meta: {
@@ -458,7 +469,140 @@ export class ApiSessionAgentController {
         ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }),
       },
       setup: composition.setup,
-    })).agent
+    }))
+  }
+
+  /**
+   * Retain disposal authority for an Agent created by the Web API.
+   * @param handle - exact lifecycle handle returned by the factory.
+   * @returns the handle's Agent.
+   */
+  own(handle: AgentHandle): Agent {
+    this.ownedHandles.set(handle.agent.id, handle)
+    return handle.agent
+  }
+
+  /** Whether a lifecycle unload belongs to an uncommitted deletion batch. */
+  isDeleting(sessionId: SessionId): boolean {
+    return this.deleting.has(sessionId)
+  }
+
+  private async deletionTree(rootId: SessionId): Promise<SessionId[]> {
+    const stored = await this.ctx.sessionPersistence.list()
+    const headers = [...stored.map(row => row.header), ...this.ctx.sessions.list().map(session => session.header)]
+    const known = new Map<SessionId, SessionHeader>()
+    const conflicting = new Set<SessionId>()
+    const children = new Map<SessionId, Set<SessionId>>()
+    for (const header of headers) {
+      const previous = known.get(header.id)
+      if (previous !== undefined && (previous.origin !== header.origin || previous.parentSession !== header.parentSession)) {
+        conflicting.add(header.id)
+      }
+      known.set(header.id, header)
+      if (header.origin !== 'subagent' || header.parentSession === undefined) continue
+      const siblings = children.get(header.parentSession) ?? new Set<SessionId>()
+      siblings.add(header.id)
+      children.set(header.parentSession, siblings)
+    }
+    const root = known.get(rootId)
+    if (root === undefined) throw new RemoteError('session/not-found', `session "${rootId}" not found`, { sessionId: rootId })
+    // A selected child may still be referenced by an undeleted parent's durable catalog.
+    if (root.origin === 'subagent') throw this.deleteBusy(rootId)
+    const visiting = new Set<SessionId>()
+    const visited = new Set<SessionId>()
+    const ordered: SessionId[] = []
+    const visit = (id: SessionId): void => {
+      if (visiting.has(id) || conflicting.has(id)) throw this.deleteBusy(rootId)
+      if (visited.has(id)) return
+      visiting.add(id)
+      for (const child of children.get(id) ?? []) visit(child)
+      visiting.delete(id)
+      visited.add(id)
+      ordered.push(id)
+    }
+    visit(rootId)
+    return ordered
+  }
+
+  private async deletionAdmission(rootId: SessionId, ids: readonly SessionId[], authorize?: (id: SessionId) => boolean): Promise<void> {
+    if (authorize !== undefined && ids.some(id => !authorize(id))) {
+      throw new RemoteError('remote-access/denied', 'not allowed to delete this Session tree', {
+        action: 'workspace/deleteSession', reason: 'no-allow',
+      })
+    }
+    for (const id of ids) {
+      if (this.resumes.has(id) || this.claims.has(id)) throw this.deleteBusy(rootId)
+      const activity = await this.ctx.waterfall('workspace/session-activity', { sessionId: id }, () => Promise.resolve([]))
+      if (activity.length > 0 || (this.ctx.agents.get(id)?.status ?? 'idle') !== 'idle') throw this.deleteBusy(rootId)
+    }
+    const rootAgent = this.ctx.agents.get(rootId)
+    if (this.ctx.sessions.get(rootId) !== undefined
+      && (rootAgent === undefined || this.ownedHandles.get(rootId)?.agent !== rootAgent)) throw this.deleteBusy(rootId)
+    if (rootAgent === undefined && ids.some(id => this.ctx.sessions.get(id) !== undefined)) throw this.deleteBusy(rootId)
+  }
+
+  /**
+   * Delete a root and every actual subagent descendant, never independent forks.
+   * Admission and ownership cover the complete tree before any stored log is removed.
+   * @param sessionId - ordinary root Session selected by the user.
+   * @param authorize - per-target permission from the calling Remote context; absent for trusted Host calls.
+   */
+  async deleteSession(sessionId: SessionId, authorize?: (id: SessionId) => boolean): Promise<void> {
+    if (this.deleting.has(sessionId)) throw this.deleteBusy(sessionId)
+    const ids = await this.deletionTree(sessionId)
+    if (ids.some(id => this.deleting.has(id))) throw this.deleteBusy(sessionId)
+    for (const id of ids) this.deleting.add(id)
+    try {
+      await this.deletionAdmission(sessionId, ids, authorize)
+      const rootAgent = this.ctx.agents.get(sessionId)
+      const subagents = this.ctx.get('subagents')
+      if (rootAgent !== undefined && subagents !== undefined) {
+        try {
+          await subagents.drainDescendants([rootAgent], { idleOnly: true })
+        } catch (error) {
+          if (error instanceof Error && error.name === 'SubagentError' && 'code' in error && error.code === 'DESCENDANTS_BUSY') throw this.deleteBusy(sessionId)
+          throw error
+        }
+      }
+      await this.deletionAdmission(sessionId, ids, authorize)
+      for (const id of ids) {
+        const attached = this.ctx.sessions.get(id)
+        const agent = this.ctx.agents.get(id)
+        const handle = this.ownedHandles.get(id)
+        if (attached !== undefined && (agent === undefined || handle?.agent !== agent)) throw this.deleteBusy(sessionId)
+      }
+      // Releasing an idle managed descendant may settle its parent's catalog.
+      // It must not admit an uninspected new member into the deletion batch.
+      const refreshed = await this.deletionTree(sessionId)
+      if (refreshed.length !== ids.length || refreshed.some(id => !this.deleting.has(id))) throw this.deleteBusy(sessionId)
+      await this.ctx.workspaceRegistry.deleteSessions(ids, async () => {
+        await this.deletionAdmission(sessionId, ids, authorize)
+        for (const id of ids) {
+          const handle = this.ownedHandles.get(id)
+          if (handle === undefined) continue
+          // No await may separate this last running check from owned teardown.
+          if (handle.agent.status !== 'idle') throw this.deleteBusy(sessionId)
+          await handle.dispose()
+        }
+        const finalIds = await this.deletionTree(sessionId)
+        if (finalIds.length !== ids.length || finalIds.some(id => !this.deleting.has(id))) throw this.deleteBusy(sessionId)
+        try {
+          await this.ctx.sessionPersistence.deleteMany(ids)
+        } catch (error) {
+          if (error instanceof Error && error.name === 'SessionAlreadyOwnedError') {
+            throw new RemoteError('session/writer-held', 'a Session in this tree has another writer', { sessionId }, { cause: error })
+          }
+          throw error
+        }
+      })
+      for (const id of ids) this.ctx.emit('api-session/removed', id, true)
+    } finally {
+      for (const id of ids) this.deleting.delete(id)
+    }
+  }
+
+  private deleteBusy(sessionId: SessionId): RemoteError<'session/delete-busy'> {
+    return new RemoteError('session/delete-busy', `session "${sessionId}" is busy or owned by another lifecycle`, { sessionId })
   }
 
   private agentOptions(): AgentOptions {

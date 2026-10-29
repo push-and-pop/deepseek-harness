@@ -3,6 +3,7 @@
   - menuitem "Rename"
   - menuitem "Fork session"
   - menuitem "Archive session"
+  - menuitem "Delete session"
   - menuitem "Copy Session ID"
   - separator
   - menuitem "Export session"

@@ -185,6 +185,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     }
     'session/projections-unavailable': Record<string, never>
     'session/writer-held': { readonly sessionId: SessionId }
+    'session/delete-busy': { readonly sessionId: SessionId }
+    'session/has-children': { readonly sessionId: SessionId }
     'session/agent-busy': { readonly reason: string }
     'session/invalid-time-zone': { readonly value: string }
     'session/workspace-attach-failed': { readonly sessionId: SessionId; readonly workspaceId: string }
@@ -579,11 +581,12 @@ declare module '@deepseek-ai/cordis' {
      */
     'api-session/added'(summary: SessionSummary): void
     /**
-     * A Session left the live Host registry.
+     * A Session left the live registry or its stored history was permanently deleted.
      * @mode emit
      * @param sessionId - removed Session identity.
+     * @param permanentlyDeleted - true only after storage deletion commits; omission is an ordinary unload.
      */
-    'api-session/removed'(sessionId: SessionId): void
+    'api-session/removed'(sessionId: SessionId, permanentlyDeleted?: true): void
     /**
      * One Agent changed running state.
      * @mode emit

@@ -175,6 +175,8 @@ export class WorkspaceRegistry extends Service {
   private state?: WorkspaceDomainState
   private readonly entities = new Map<WorkspaceId, WorkspaceEntity>()
   private readonly headers = new Map<SessionId, SessionHeader>()
+  /** Committed deletions whose Workspace cleanup still needs its journal retry. */
+  private readonly pendingDeletedSessions = new Set<SessionId>()
   private readonly sessionPaths = new Map<SessionId, string>()
   private readonly missingSessionPaths = new Set<SessionId>()
   private readonly invalidSessionPaths = new Map<SessionId, string>()
@@ -182,7 +184,8 @@ export class WorkspaceRegistry extends Service {
 
   private readonly host: WorkspaceEntityHost = {
     table: () => this.requireTable(),
-    candidateMatches: (id, path) => this.sessionPaths.get(id) === path || this.missingSessionPaths.has(id),
+    candidateMatches: (id, path) => !this.pendingDeletedSessions.has(id)
+      && (this.sessionPaths.get(id) === path || this.missingSessionPaths.has(id)),
     readSessionHeader: id => this.readSessionHeader(id),
     rememberSessionPath: (id, path) => {
       this.sessionPaths.set(id, path)
@@ -342,7 +345,7 @@ export class WorkspaceRegistry extends Service {
    * @returns the archived session ids in archive order.
    */
   get archivedSessionIds(): readonly SessionId[] {
-    return this.requireState().archivedSessionIds
+    return this.requireState().archivedSessionIds.filter(id => !this.pendingDeletedSessions.has(id))
   }
 
   /**
@@ -415,7 +418,7 @@ export class WorkspaceRegistry extends Service {
    * @returns Session ids in pin order (most recently pinned first).
    */
   get pinnedSessionIds(): readonly SessionId[] {
-    return this.requireState().pinnedSessionIds
+    return this.requireState().pinnedSessionIds.filter(id => !this.pendingDeletedSessions.has(id))
   }
 
   /**
@@ -463,6 +466,83 @@ export class WorkspaceRegistry extends Service {
         pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
       })
     })
+  }
+
+  /**
+   * Delete one Session through the recoverable batch metadata operation.
+   * @param sessionId - Session whose references are removed after storage commits.
+   * @param remove - lifecycle owner's storage commit.
+   */
+  deleteSession(sessionId: SessionId, remove: () => Promise<void>): Promise<void> {
+    return this.deleteSessions([sessionId], remove)
+  }
+
+  /**
+   * Journal one complete Session tree and clear its references only after storage commits.
+   * @param sessionIds - exact tree members; duplicates are ignored.
+   * @param remove - lifecycle owner that releases its Agents and commits the storage batch.
+   */
+  deleteSessions(sessionIds: readonly SessionId[], remove: () => Promise<void>): Promise<void> {
+    const ids = [...new Set(sessionIds)]
+    return this.enqueueOperation(async () => {
+      await this.setState({ ...this.requireState(), pendingSessionDeletion: undefined, pendingSessionDeletions: ids })
+      try {
+        await remove()
+      } catch (error) {
+        await this.recoverSessionDeletion()
+        throw error
+      }
+      for (const id of ids) this.pendingDeletedSessions.add(id)
+      try {
+        await this.finishSessionDeletions(ids)
+      } catch (error) {
+        this.ctx.logger.warn(`Session batch was deleted; Workspace cleanup remains pending: ${String(error)}`)
+      }
+    })
+  }
+
+  private async recoverSessionDeletion(): Promise<void> {
+    const state = this.requireState()
+    const ids = state.pendingSessionDeletions
+      ?? (state.pendingSessionDeletion === undefined ? undefined : [state.pendingSessionDeletion])
+    if (ids === undefined) return
+    const removed: SessionId[] = []
+    for (const id of ids) {
+      if (this.ctx.get('sessions')?.get(id) === undefined
+        && await this.ctx.sessionPersistence.stat(id) === undefined) removed.push(id)
+    }
+    await this.finishSessionDeletions(removed)
+  }
+
+  private async finishSessionDeletions(sessionIds: readonly SessionId[]): Promise<void> {
+    const ids = new Set(sessionIds)
+    for (const [id, record] of this.requireTable().entries()) {
+      const matching = record.sessionIds.filter(sessionId => ids.has(sessionId))
+      if (matching.length === 0) continue
+      const entity = this.entities.get(id)
+      if (entity !== undefined) {
+        for (const sessionId of matching) await entity.detachSession(sessionId)
+      } else await this.requireTable().update(id, current => ({
+        ...current,
+        sessionIds: current.sessionIds.filter(candidate => !ids.has(candidate)),
+        updatedAt: new Date().toISOString(),
+      }))
+    }
+    for (const id of ids) {
+      this.headers.delete(id)
+      this.sessionPaths.delete(id)
+      this.missingSessionPaths.delete(id)
+      this.invalidSessionPaths.delete(id)
+    }
+    const state = this.requireState()
+    await this.setState({
+      ...state,
+      archivedSessionIds: state.archivedSessionIds.filter(id => !ids.has(id)),
+      pinnedSessionIds: state.pinnedSessionIds.filter(id => !ids.has(id)),
+      pendingSessionDeletion: undefined,
+      pendingSessionDeletions: undefined,
+    })
+    for (const id of ids) this.pendingDeletedSessions.delete(id)
   }
 
   /**
@@ -634,6 +714,7 @@ export class WorkspaceRegistry extends Service {
    * fails loud; this path never guesses which operation created a row from its shape alone.
    */
   private async recoverPendingMutation(): Promise<void> {
+    await this.recoverSessionDeletion()
     const state = this.requireState()
     const pending = state.pendingMutation
     if (pending === undefined) return
