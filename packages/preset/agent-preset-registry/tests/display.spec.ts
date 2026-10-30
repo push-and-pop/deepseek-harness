@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { presetDisplayText, type BuiltInPresetCopyKey } from '../src/display.ts'
+import { isBuiltInPreset, presetDisplayText, type BuiltInPresetCopyKey } from '../src/display.ts'
 
 const t = (key: BuiltInPresetCopyKey): string => `t:${key}`
 
@@ -14,6 +14,21 @@ describe('presetDisplayText', () => {
       name: 't:presetStandardName',
       description: 't:presetStandardDescription',
     })
+  })
+
+  it('recognizes Liangshen and resolves its dictionary keys', () => {
+    const preset = { id: 'liangshen' }
+    expect(isBuiltInPreset(preset)).toBe(true)
+    expect(presetDisplayText(preset, t)).toEqual({
+      name: 't:presetLiangshenName',
+      description: 't:presetLiangshenDescription',
+    })
+  })
+
+  it('keeps named Liangshen declarations untranslated', () => {
+    const preset = { id: 'liangshen', name: 'Team mode', description: 'Team copy' }
+    expect(isBuiltInPreset(preset)).toBe(false)
+    expect(presetDisplayText(preset, t)).toEqual({ name: 'Team mode', description: 'Team copy' })
   })
 
   it('keeps user-authored metadata untranslated', () => {

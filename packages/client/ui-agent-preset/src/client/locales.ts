@@ -21,6 +21,8 @@ export type AgentPresetSettingsKey =
   | 'presetMinimalDescription'
   | 'presetCordisName'
   | 'presetCordisDescription'
+  | 'presetLiangshenName'
+  | 'presetLiangshenDescription'
   | 'inUse'
   | 'noDescription'
   | 'brokenBadge'
@@ -59,6 +61,9 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Customize DSH through conversation. Let the agent write plugins that add features or UI, or combine tools and prompts to create your own mode.',
+  presetLiangshenName: 'Deep mode',
+  presetLiangshenDescription:
+    'Uses minimal prompts, PTC batching, on-demand tool loading, and key facts for context.',
 
   inUse: 'New task default',
 
@@ -100,6 +105,8 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalDescription: 'Agent 使用终端和图片读取工具，并支持上下文压缩，适合测试和对比其基础表现。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用对话定制 DSH：让 Agent 编写插件，添加新功能或界面；也能组合工具和提示词，创建自己的模式。',
+  presetLiangshenName: 'Deep模式',
+  presetLiangshenDescription: '使用极简提示词、PTC 批处理和按需加载工具，以关键事实组织上下文。',
 
   inUse: '新任务默认',
 
@@ -145,6 +152,8 @@ export const ja = {
   'presetMinimalDescription': 'エージェントはターミナルと画像読み取りを使用し、コンテキスト圧縮にも対応します。基本的な性能のテストや比較に役立ちます。',
   'presetCordisName': 'クリエイターモード',
   'presetCordisDescription': '会話を通じて DSH をカスタマイズします。機能や UI を追加するプラグインをエージェントに書かせたり、ツールとプロンプトを組み合わせて独自のモードを作成したりできます。',
+  'presetLiangshenName': 'Deep モード',
+  'presetLiangshenDescription': '最小限のプロンプト、PTC による一括処理、必要に応じたツール読み込みを使い、重要な事実でコンテキストを整理します。',
   'inUse': '新しいタスクの既定',
   'noDescription': '説明はありません。',
   'brokenBadge': '読み込みに失敗',
@@ -184,6 +193,9 @@ export const es = {
   presetCordisName: 'Modo creador',
   presetCordisDescription:
     'Personaliza DSH a través de la conversación. Deje que el agente escriba complementos que agreguen funciones o interfaz de usuario, o combine herramientas e indicaciones para crear su propio modo.',
+  presetLiangshenName: 'Modo Deep',
+  presetLiangshenDescription:
+    'Usa instrucciones mínimas, procesamiento por lotes con PTC y carga de herramientas bajo demanda, con hechos clave para el contexto.',
 
   inUse: 'Nueva tarea predeterminada',
 
@@ -229,6 +241,9 @@ export const fr = {
   presetCordisName: 'Mode Créateur',
   presetCordisDescription:
     "Personnalisez DSH via la conversation. Laissez l'agent écrire des plugins qui ajoutent des fonctionnalités ou une interface utilisateur, ou combinez des outils et des invites pour créer votre propre mode.",
+  presetLiangshenName: 'Mode Deep',
+  presetLiangshenDescription:
+    'Utilise des instructions minimales, le traitement par lots PTC et le chargement des outils à la demande, avec des faits clés pour le contexte.',
 
   inUse: 'Nouvelle tâche par défaut',
 
@@ -274,6 +289,9 @@ export const de = {
   presetCordisName: 'Erstellermodus',
   presetCordisDescription:
     'Passen Sie DSH durch Gespräche an. Lassen Sie den Agenten Plugins schreiben, die Funktionen oder Benutzeroberflächen hinzufügen, oder kombinieren Sie Tools und Eingabeaufforderungen, um Ihren eigenen Modus zu erstellen.',
+  presetLiangshenName: 'Deep-Modus',
+  presetLiangshenDescription:
+    'Nutzt minimale Prompts, PTC-Stapelverarbeitung, das Laden von Tools bei Bedarf und zentrale Fakten für den Kontext.',
 
   inUse: 'Neuer Aufgabenstandard',
 
@@ -319,6 +337,9 @@ export const ru = {
   presetCordisName: 'Режим автора',
   presetCordisDescription:
     'Настройте DSH через разговор. Позвольте агенту писать плагины, которые добавляют функции или пользовательский интерфейс, или комбинируйте инструменты и подсказки для создания собственного режима.',
+  presetLiangshenName: 'Режим Deep',
+  presetLiangshenDescription:
+    'Использует минимальные инструкции, пакетную обработку PTC, загрузку инструментов по запросу и ключевые факты для контекста.',
 
   inUse: 'Новая задача по умолчанию',
 
@@ -364,6 +385,9 @@ export const pt = {
   presetCordisName: 'Modo criador',
   presetCordisDescription:
     'Personalize DSH por meio de conversa. Deixe o agente escrever plug-ins que adicionem recursos ou UI, ou combine ferramentas e prompts para criar seu próprio modo.',
+  presetLiangshenName: 'Modo Deep',
+  presetLiangshenDescription:
+    'Usa prompts mínimos, processamento em lotes com PTC, carregamento de ferramentas sob demanda e fatos essenciais para o contexto.',
 
   inUse: 'Novo padrão de tarefa',
 

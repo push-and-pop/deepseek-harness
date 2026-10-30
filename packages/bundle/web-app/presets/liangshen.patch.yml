@@ -1,0 +1,158 @@
+# Agent preset liangshen: one `@deepseek-ai/dsh-agent-preset` declaration inserted
+# after the web patch. Edits saved from the Web editor override this row's
+# `config.plugins` by id from the profile patch.
+- insert:
+    - id: preset-liangshen
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: liangshen
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                You are a helpful software engineer assistant.
+
+                - Thinking Disruption: Never reason through the same hypothesis more than twice. When a fact is missing, stop thinking and call a native inspection tool (read, grep, bash/pwsh) to settle it — no speculation without new evidence.
+                - Action-Oriented: Use thinking only to pick the next concrete operation. Do not pre-rehearse implementations in thought; verify every claim against real tool output during execution.
+                - Parallel Inspection: When several independent inspections, searches, or checks are needed, emit all of their tool calls in a single turn rather than across sequential rounds. The harness executes independent read-only calls in parallel. When two or more of those targets are the same kind of step, batch them into one run_code program instead and keep only its conclusion.
+                - Shell Discipline: Shell processes are ephemeral; directory changes do not persist across tool calls. Use compound commands (e.g. cd <path> && <cmd>) or pass workdir explicitly for operations in subdirectories.
+                - Development Standard: Follow YAGNI and the PDCA loop. Each step verifies a single assumption. Do not write redundant comments.
+                - Bounded Inspection & Convergence: Do not traverse dependency chains unbounded. Stop repeating an inspection whose answer you already hold: re-reading the same target to answer the same question is not progress. A concrete hypothesis with a cheap check is different: run it. Once core context is understood, immediately converge and begin answering or making edits. Verify edge cases during post-edit testing rather than over-reading upfront.
+                - Bounded Output: never dump a large or unbounded command output into the conversation. Filter at the source with grep/head/tail/wc and read the narrow range you actually need; the model's long-range attention is a bounded budget and raw logs evict the session's own constraints from it.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: planning
+            name: cordis:group
+            group: true
+            isolate:
+              planMode: true
+            config:
+              - id: plan-mode
+                name: '@deepseek-ai/dsh-plan-mode'
+                config:
+                  section: |
+                    You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+                    Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+                    The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+                    Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+                    Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+                    When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 4096
+                  headChars: 2048
+                  tailChars: 1024
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelection: true
+                  modelDiscovery: true
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                disabled: true
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+                disabled: true
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: tool-executor-ptc
+            name: '@deepseek-ai/dsh-tool-executor-ptc'
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: tool-plugin-manager
+            name: '@deepseek-ai/dsh-plugin-manager/tools'
+            disabled: true
+          - id: tool-plugin-market
+            name: '@deepseek-ai/dsh-plugin-market/tools'
+            disabled: true
+          - id: minimal-prompt
+            name: '@deepseek-ai/dsh-web-app/presets/liangshen/minimal-prompt.mjs'
+            config:
+              keepPlanPolicy: true
+              dispatcher: true
+          - id: tool-catalog
+            name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-catalog.mjs'
+            config:
+              descriptionMaxLength: 200
+              pagedToolPatterns: ['mcp__*']
+              maxActiveNamespaces: 3
+              maxResidentTokens: 8000
+          - id: tool-activate
+            name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-activate.mjs'
+          - id: fact-ledger
+            name: '@deepseek-ai/dsh-web-app/presets/liangshen/fact-ledger.mjs'
+          - id: working-context
+            name: '@deepseek-ai/dsh-web-app/presets/liangshen/working-context.mjs'

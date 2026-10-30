@@ -280,12 +280,70 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies the shipped presets, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'liangshen', 'minimal', 'ptc', 'standard'])
     expect(listed.every(preset => !('path' in preset))).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
+  })
+
+  it('composes Liangshen with official PTC execution without changing Standard', async () => {
+    const adapter = new MinimalCompactionAdapter()
+    onTestFinished(ctx.llm.registerAdapter(['liangshen-test'], adapter))
+    const handle = await ctx.agents.create({
+      sessionId: SessionId(`preset-liangshen-${randomUUID()}`), meta: { cwd: REPO_ROOT },
+      agentOptions: { provider: 'liangshen-test', model: 'liangshen-test' },
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'liangshen').then(() => undefined),
+    })
+    try {
+      const listed = await ctx.agentPresets.list()
+      expect(listed.find(preset => preset.id === 'liangshen')?.broken).toBeUndefined()
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      expect(assembly.tools.map(tool => tool.name)).toEqual(['run_code'])
+      const persona = assembly.sections.find(section => section.name === 'deployment:persona-prefix')?.text ?? ''
+      expect(persona).toContain('Thinking Disruption')
+      expect(persona).toContain(`Your working directory is ${REPO_ROOT}.`)
+      expect(persona).toContain('R0.5')
+      expect(assembly.sections.map(section => section.name).sort()).toEqual([
+        'deployment:persona-prefix', 'plan:policy', 'tools:ptc-only', 'tools:sdk',
+      ])
+      expect(toolNames(ctx, handle.agent)).toEqual(expect.arrayContaining(['fact_register', 'tool_activate', 'skill', 'read', 'subagent']))
+      expect(ctx.agentPresets.defaultId).toBe('standard')
+      expect(toolNames(ctx)).not.toContain('fact_register')
+      handle.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Confirm readiness.' }] }))
+      await handle.agent.whenIdle()
+      const request = adapter.requests.find(item => item.purpose === undefined)
+      expect(request).toBeDefined()
+      expect(request?.tools?.map(tool => tool.name)).toEqual(['run_code'])
+      const messages = handle.agent.session.deriveMessages()
+      const catalogs = messages.filter(message => String(message.source.kind) === 'liangshen-tool-catalog')
+      expect(catalogs).toHaveLength(1)
+      expect(JSON.stringify(catalogs[0])).toContain('fact_register')
+      expect(messages.some(message => message.role === 'assistant')).toBe(true)
+      expect({
+        wire: request?.tools?.map(tool => tool.name),
+        sections: assembly.sections.map(section => section.name).sort(),
+        catalogPublished: catalogs.length,
+        defaultPreset: ctx.agentPresets.defaultId,
+      }).toMatchInlineSnapshot(`
+        {
+          "catalogPublished": 1,
+          "defaultPreset": "standard",
+          "sections": [
+            "deployment:persona-prefix",
+            "plan:policy",
+            "tools:ptc-only",
+            "tools:sdk",
+          ],
+          "wire": [
+            "run_code",
+          ],
+        }
+      `)
+    } finally {
+      await handle.dispose()
+    }
   })
 
   it('composes the full agent from `standard`', async () => {

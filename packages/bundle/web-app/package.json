@@ -27,7 +27,8 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./startup/locale/*.json": "./locale/startup/*.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./presets/liangshen/*.mjs": "./presets/liangshen/*.mjs"
   },
   "files": [
     "locale/*.json",
@@ -40,7 +41,11 @@
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
     "lib/public-url-*.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "presets/liangshen.patch.yml",
+    "presets/liangshen/*.mjs",
+    "presets/liangshen/NOTICE",
+    "presets/liangshen/LICENSE"
   ],
   "license": "MIT",
   "dsh": {
@@ -50,7 +55,8 @@
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
-        "./presets/cordis.patch.yml"
+        "./presets/cordis.patch.yml",
+        "./presets/liangshen.patch.yml"
       ]
     }
   },
@@ -192,7 +198,8 @@
     "@deepseek-ai/dsh-client-ui-settings-session-log": "workspace:*",
     "@deepseek-ai/dsh-harness-dev-context": "workspace:*",
     "@deepseek-ai/dsh-deliverable-file-references": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-file-drag": "workspace:*"
+    "@deepseek-ai/dsh-client-ui-file-drag": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
@@ -211,6 +218,11 @@
     "@deepseek-ai/dsh-shell-env": "workspace:*",
     "@deepseek-ai/dsh-typert-registry": "workspace:*",
     "@deepseek-ai/libreoffice-kit": "^0.1.5",
-    "@deepseek-ai/dsh-otel": "workspace:*"
+    "@deepseek-ai/dsh-otel": "workspace:*",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-tool-executor-native": "workspace:*"
   }
 }

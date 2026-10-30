@@ -1,0 +1,22 @@
+Liangshen preset integration
+
+Adapted from @linxin666/dsh-liangshen 0.4.11, copyright zhu1090093659,
+licensed under Apache-2.0. The full license is included in LICENSE.
+Source: https://github.com/zhu1090093659/dsh-web/tree/dev/packages/dsh-liangshen
+Imported revision: 2b4c653d6231eb5c473a7abf9d10fd3e01954952
+
+The paging, fact-ledger, working-context, dispatcher rules, tool-catalog helpers,
+and working-discipline text derive from that project. Local changes adapt prompt
+assembly, scoped tools, successful-call replay, effect disposal, activation and
+the preset declaration to this Harness version. The browser lever and alternate
+instruction-delivery implementations are not included.
+
+The preset composition derives from DeepSeek Harness Standard/PTC presets,
+Copyright DeepSeek, licensed under the repository's MIT license.
+
+Upstream attribution:
+agent.cordis.yml derives from DeepSeek Harness Minimal, Standard and PTC (MIT).
+The upstream minimal-prompt/tool-catalog implementations reference the experiments
+of https://github.com/xiaobright/dsh-anchored-standard (MIT); message injection
+follows the Harness skill catalog. The dispatcher module retains its upstream
+attribution to @eddyskywalker/dsh-chatgpt-subscription.

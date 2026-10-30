@@ -46,6 +46,8 @@ dsh --profile web --no-open --port 8080
 
 ### 配置
 
+内置 `liangshen`（Deep模式）预设可直接用于 Web 和 Desktop 的新任务，无需另装插件；默认仍为标准模式。它改编自 [dsh-liangshen](https://github.com/zhu1090093659/dsh-web/tree/dev/packages/dsh-liangshen)，包含精简工作纪律、可选调度者规则、官方 PTC 执行器、持久工具目录、MCP 命名空间分页和关键事实登记簿。工作区指令及沙箱约束仍由 Host 负责。将 `minimal-prompt` 行的 `dispatcher` 设为 `false` 可关闭调度者规则；禁用 `tool-executor-ptc` 行可改用原生调用，目录会跟随执行器，不另设呈现开关。被分页的 MCP 工具必须继承自 Host 或预设，不能直接注册到 Agent 自身。目录、激活工具和 working-context 三行的分页模式与容量必须一致（默认 `mcp__*`、三个命名空间）。本次集成不包含上游拨杆、其他工作区指令投递模式，也不声称基准效果提升。改编模块的许可和署名见随包发布的 [NOTICE](presets/liangshen/NOTICE)。
+
 `minimal` agent preset 使用持久 Shell、`read_image` 工具和固定 persona，支持自动历史压缩以及会话空闲时的 `/compact` 命令。它复用 Host token meter，并拥有隔离的压缩后端。[压缩配置与保留策略](../../compaction/compaction-basic/README.zh.md#use-this-package) 沿用现有后端。图片读取复用 Host 文件系统和附件存储，要求模型支持图片输入；不加载文本读取、写入和编辑工具。
 
 `--host` 与 `--port` 配置监听器；`--tls-cert` 与 `--tls-key` 让它直接提供 HTTPS；`--public-url` 指定 GUI 在剥离前缀的代理之后对外公告的公开 HTTP(S) 根，`--trusted-host` 则添加更多被接受的 authority。这些都在[监听、信任与公开部署](#public-deployments)中说明，而这些 flag 设置的 `tls` 字段记录在[载体的配置](../../../docs/subsystems/web-server.zh.md#config)中：
