@@ -15,11 +15,11 @@
  * correction. An appended correction leaves the model holding two rules for
  * one decision, and a model facing two readings of the same rule takes the
  * stricter one and does not check which was meant to win. So a superseded
- * sentence is rewritten where it stands, and `DISPATCHER_RULES_PROVENANCE` records
+ * sentence is rewritten where it stands, and `DISPATCHER_RULES_SOURCE` records
  * what changed and why, so the history is still readable from the code.
  *
  * The re-extraction folded in four corrections the frozen 0.24.6 text carried
- * wrongly or lacked entirely (each is listed in the provenance record):
+ * wrongly or lacked entirely (each is listed in the source record):
  * - R2 read a mounted tool as an enforced allowlist. The tool row and its
  *   provider/model parameters are mounted statically, so their presence says
  *   nothing about whether a session recorded an allowlist at all. R2 now has
@@ -57,7 +57,7 @@ export const DISPATCHER_RULES_COMPACT = `## Delegation discipline
 - Treat child reports and pinned facts as evidence to check, not proof of completion or current state. Re-read changed subjects, review relevant diffs, and verify acceptance with focused tests or other direct checks. Resolve known defects or explicitly obtain a scope decision; report what changed, checks actually run, and remaining risks or verification limits. Never claim success from a completion notification alone.`
 
 /** Where the full rule text came from, and every correction folded into it. */
-export const DISPATCHER_RULES_PROVENANCE = {
+export const DISPATCHER_RULES_SOURCE = {
   package: '@eddyskywalker/dsh-chatgpt-subscription',
   inheritedVersion: '0.24.6',
   reExtractedAt: '2026-10-18',

@@ -1,6 +1,6 @@
 /** Workspace keyboard commands over the real Web composition and a recorded Session. */
 import { mkdir, readFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -178,8 +178,9 @@ describe.skipIf(mode === 'record')('web e2e: workspace shortcuts', () => {
     await expect.poll(() => launched).toEqual([{ app: 'vscode', path: workspace.path }])
 
     await page.keyboard.press('Meta+Alt+P')
-    const files = page.locator('[data-files-state="tree"]')
+    const files = page.locator('[data-files-page]')
     await files.locator('[data-files-row="empty"]').waitFor()
+    // The directory opener sits in the files page's header, above the tree.
     const opener = files.locator('[data-open-target="directory"]')
     await opener.getByRole('button', { name: 'Open in VS Code', exact: true }).click()
     await expect.poll(() => launched).toEqual([
@@ -195,8 +196,9 @@ describe.skipIf(mode === 'record')('web e2e: workspace shortcuts', () => {
       { app: 'finder', path: workspace.path }, { app: 'finder', path: workspace.path },
     ])
     await expect.poll(() => opener.getAttribute('data-state')).toBe('idle')
-    await compareOrRefreshGolden(join(root, 'files-open.expected.md'),
-      await captureStableAria(page, '[data-files-state="tree"]', scaffold.workspaceCwd), mode)
+    const filesAria = (await captureStableAria(page, '[data-files-page]', scaffold.workspaceCwd))
+      .replaceAll(`{{cwd}}${sep}keyboard-project`, '{{cwd}}/keyboard-project')
+    await compareOrRefreshGolden(join(root, 'files-open.expected.md'), filesAria, mode)
     await opener.getByRole('button', { name: 'More ways to open', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Finder (default)', exact: true }).waitFor()
     await page.keyboard.press('Escape')

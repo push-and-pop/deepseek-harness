@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { allowAllAccess, bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, bindSnapshotSelector, contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import type {} from '../src/client/index.ts'
 import { RemoteAccessSection, RemoteAccessNotice } from '../src/client/RemoteAccessSection.tsx'
 import type { RemoteAccessProps, RemoteAccessNoticeProps } from '../src/client/RemoteAccessSection.tsx'
@@ -12,7 +12,7 @@ afterEach(cleanup)
 const unused = (() => { throw new Error('unused framework seat') }) as never
 const globals = {
   useSessions: unused, useSessionStatus: unused, useSessionRetainInfo: unused, useResource: unused,
-  useWorkspaces: unused, usePanelInfo: unused, ...allowAllAccess,
+  useWorkspaces: unused, usePanelInfo: unused, useContextMenu: contextMenuHook(), ...allowAllAccess,
 }
 const url = 'https://pc.example.ts.net:8443/?token=secret-token'
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }) }

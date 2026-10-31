@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { GlobalStandardProps, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { allowAllAccess, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, contextMenuHook, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { DeleteSessionInjected, SessionDeleteConfirmProps, SessionMenuItemProps } from '../src/client/contract/slots.ts'
@@ -16,6 +16,7 @@ const request = { sessionId, displayTitle: '待删除会话' }
 const t: PropsLocale<'workspace'>['t'] = makeTranslate(zh, commonZh)
 const standard: GlobalStandardProps = {
   ...allowAllAccess,
+  useContextMenu: contextMenuHook(),
   useSessions: () => { throw new Error('unused') },
   useSessionStatus: () => { throw new Error('unused') },
   useSessionRetainInfo: () => undefined,

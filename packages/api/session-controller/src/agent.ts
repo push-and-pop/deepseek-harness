@@ -482,7 +482,10 @@ export class ApiSessionAgentController {
     return handle.agent
   }
 
-  /** Whether a lifecycle unload belongs to an uncommitted deletion batch. */
+  /** Whether a lifecycle unload belongs to an uncommitted deletion batch.
+   * @param sessionId - Session whose pending deletion is queried.
+   * @returns True while this controller owns that Session's deletion batch.
+   */
   isDeleting(sessionId: SessionId): boolean {
     return this.deleting.has(sessionId)
   }

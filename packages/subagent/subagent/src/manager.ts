@@ -292,6 +292,7 @@ export class SubagentManager {
   /**
    * Stop the managed descendants of exact live host-owned parents.
    * @param parents - exact live roots whose managed descendants must stop.
+   * @param options - when idleOnly is true, refuse active descendants instead of stopping their work.
    */
   async drainDescendants(parents: readonly Agent[], options: { readonly idleOnly?: boolean } = {}): Promise<void> {
     const roots = new Set(parents.filter(parent => this.ctx.agents.get(parent.id) === parent))
