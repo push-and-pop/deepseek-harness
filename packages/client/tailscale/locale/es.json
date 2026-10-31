@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Acceso remoto",
+    "description": "Conecta tu teléfono a DSH de forma privada con Tailscale. El acceso remoto solo se inicia cuando lo activas en este PC."
+  }
+}

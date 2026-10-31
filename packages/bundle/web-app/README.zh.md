@@ -84,6 +84,10 @@ dsh --profile web --no-open --host "$(hostname -i | awk '{print $1}')" --public-
 
 打印的 URL 包含进程凭据，只应与预期用户分享。`printUrl: false` 无论是否配置 `--public-url` 都会抑制该行，凭据也绝不会出现在模型上下文或 `DSH_WEB_URL` 中。
 
+### 手机私有访问
+
+在本机 PC 的**设置 → 手机远程访问**中管理 [Tailscale 私有 HTTPS 访问](../../client/tailscale/README.zh.md)。先在 PC 和 iPhone 安装 Tailscale 并登录；不需要购买域名、办理公网 IP 或设置路由器端口转发。插件默认不开放网络访问，开启后仍保留 DSH 身份验证，关闭访问或退出应用时停止其持有的监听器。
+
 ### 通过 SSH 运行
 
 通过 SSH 启动 `dsh --profile web` 时，URL 行仍会打印，但不会为你打开浏览器：本地转发地址由 SSH 客户端或编辑器持有。没有公告根时，打印的 URL 指向远端宿主机的绑定地址端点——绑定 loopback 时即 loopback——你通过自己的转发地址访问它。配置了 `--public-url` 时，打印的 URL 是带认证的公告根；浏览器交接仍被抑制，因为在远端宿主机上打开浏览器无法到达你的屏幕。

@@ -39,7 +39,14 @@ const ENDPOINT_SEGMENT_PATTERN = /^[A-Za-z0-9_$.-]+$/
 
 interface PeerRecord {
   readonly peer: Peer
+  readonly origin?: string
   ownsSocket: boolean
+}
+
+interface TrustedOrigin {
+  readonly url: URL
+  readonly registrations: Set<symbol>
+  readonly browserPeer: Peer
 }
 
 interface ConnectionRpcInterceptor {
@@ -68,7 +75,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Host Connection service whose channel registrations belong to the caller fiber. */
 export class HostConnectionService extends Service implements HostConnectionHandle {
-  /** The Peer every authenticated browser connection shares. */
+  /** The owner Peer shared by browser connections outside dynamically registered origins. */
   readonly browserPeer: PeerScope
   private readonly peers = new Map<PeerId, PeerRecord>()
   private readonly owner: Context
@@ -76,7 +83,46 @@ export class HostConnectionService extends Service implements HostConnectionHand
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
 
-  readonly allowsRemoteAuthorities: boolean
+  private readonly trustedOrigins = new Map<string, TrustedOrigin>()
+
+  /** Whether configuration or a live HTTPS proxy registration grants a remote authority. */
+  get allowsRemoteAuthorities(): boolean {
+    return this.trustedHosts.some(isRemoteAuthority)
+      || [...this.trustedOrigins.values()].some(registration => isRemoteAuthority(registration.url.host))
+  }
+
+  /** Register one exact HTTPS proxy origin in the calling Context. */
+  registerTrustedOrigin(origin: string): () => Promise<void> {
+    const url = new URL(origin)
+    if (url.protocol !== 'https:' || (origin !== url.origin && origin !== `${url.origin}/`)
+      || url.hostname.includes('*')) {
+      throw new Error('connection: trusted origin must be a canonical HTTPS origin without credentials, path, query, or fragment')
+    }
+    const key = url.origin
+    const token = Symbol(key)
+    return this.ctx.effect(() => {
+      if (this.disposed) throw new Error('connection: cannot register a trusted origin after disposal')
+      const registration = this.trustedOrigins.get(key) ?? {
+        url,
+        registrations: new Set<symbol>(),
+        browserPeer: new Peer(this.owner, { principal: { kind: 'owner' } }),
+      }
+      registration.registrations.add(token)
+      this.trustedOrigins.set(key, registration)
+      return async () => {
+        registration.registrations.delete(token)
+        if (registration.registrations.size !== 0) return
+        this.trustedOrigins.delete(key)
+        const peers: PeerScope[] = [registration.browserPeer]
+        for (const [id, record] of this.peers) {
+          if (record.origin !== key) continue
+          this.peers.delete(id)
+          peers.push(record.peer)
+        }
+        await Promise.all(peers.map(peer => peer.dispose()))
+      }
+    }, `client-connection: trusted origin ${key}`)
+  }
 
   /**
    * Provide the Host half over the active HTTP server.
@@ -94,11 +140,12 @@ export class HostConnectionService extends Service implements HostConnectionHand
     this.browserPeer = new Peer(ctx, { principal: { kind: 'owner' } })
     ctx.effect(() => async () => {
       this.disposed = true
-      const peers = [this.browserPeer, ...Array.from(this.peers.values(), record => record.peer)]
+      const peers = [this.browserPeer, ...Array.from(this.peers.values(), record => record.peer),
+        ...Array.from(this.trustedOrigins.values(), registration => registration.browserPeer)]
       this.peers.clear()
+      this.trustedOrigins.clear()
       await Promise.all(peers.map(peer => peer.dispose()))
     }, 'client-connection: Peer scopes')
-    this.allowsRemoteAuthorities = trustedHosts.some(isRemoteAuthority)
   }
 
   /** Generic channel registry scoped to the Context reading this service. */
@@ -129,8 +176,11 @@ export class HostConnectionService extends Service implements HostConnectionHand
   admit(request: ConnectionTrustRequest): PeerAdmission {
     if (!this.isTrusted(request)) return { rejection: 403 }
     if (this.disposed) return { rejection: 401 }
-    const secure = this.owner.get('webServer')?.protocol === 'https:'
-    if (this.browserAuth.isAuthenticated(request, secure)) return { peer: this.browserPeer }
+    const secure = this.isSecure(request)
+    if (this.browserAuth.isAuthenticated(request, secure)) {
+      const registration = this.registeredOrigin(request)
+      return { peer: registration?.browserPeer ?? this.browserPeer }
+    }
     const id = this.browserAuth.authenticateApi(request, secure)
     const record = id === undefined ? undefined : this.peers.get(id)
     return record === undefined ? { rejection: 401 } : { peer: record.peer }
@@ -161,14 +211,37 @@ export class HostConnectionService extends Service implements HostConnectionHand
     }
   }
 
+  private registeredOrigin(request: ConnectionTrustRequest): TrustedOrigin | undefined {
+    if (this.trustedOrigins.size === 0) return undefined
+    const host = requestHeader(request, 'host')
+    if (host === undefined) return undefined
+    let url: URL
+    try { url = new URL(`https://${host}`) } catch { return undefined }
+    const canonical = host.toLowerCase()
+    if (canonical !== url.host && canonical !== `${url.hostname}:443`) return undefined
+    return this.trustedOrigins.get(url.origin)
+  }
+
+  private isSecure(request: ConnectionTrustRequest): boolean {
+    return this.owner.get('webServer')?.protocol === 'https:' || this.registeredOrigin(request) !== undefined
+  }
+
   private isTrusted(request: ConnectionTrustRequest): boolean {
     const carrier = this.owner.get('webServer')
+    const registered = this.registeredOrigin(request)
+    if (registered !== undefined) {
+      // A registered proxy terminates HTTPS; forwarded headers cannot select this policy.
+      const origin = requestHeader(request, 'origin')
+      if (origin !== undefined && origin !== registered.url.origin) return false
+      const url = registered.url
+      return isTrustedApiRequest(request, [`${url.hostname}:${url.port || '443'}`], carrier?.host, 'https:')
+    }
     return isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')
   }
 
-  private publishPeer(interactions: ConnectionInteractions): PeerId {
+  private publishPeer(interactions: ConnectionInteractions, origin: string | undefined): PeerId {
     const peer = new Peer(this.owner, { principal: { kind: 'owner' }, interactions })
-    this.peers.set(peer.id, { peer, ownsSocket: false })
+    this.peers.set(peer.id, { peer, ownsSocket: false, ...origin === undefined ? {} : { origin } })
     return peer.id
   }
 
@@ -184,14 +257,17 @@ export class HostConnectionService extends Service implements HostConnectionHand
       return
     }
     this.browserAuth.authorizeConnect(request, response,
-      this.owner.get('webServer')?.protocol === 'https:', interactions => this.publishPeer(interactions))
+      this.isSecure(request), interactions => this.publishPeer(interactions, this.registeredOrigin(request)?.url.origin))
   }
 
-  /**
-   * Authenticate an index request; native TLS listeners mint Secure cookies.
-   */
+  /** Authenticate an index request with the same trust policy as API admission. */
   authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexResponse): boolean {
-    return this.browserAuth.authorizeIndex(request, response, this.ctx.get('webServer')?.protocol === 'https:')
+    if (!this.isTrusted(request) || this.disposed) {
+      response.writeHead(this.disposed ? 401 : 403, { 'cache-control': 'no-store' })
+      response.end(this.disposed ? 'unauthorized' : 'forbidden')
+      return false
+    }
+    return this.browserAuth.authorizeIndex(request, response, this.isSecure(request))
   }
 
   /** Add this process's launch token to the clean application URL. */
@@ -299,6 +375,12 @@ export class HostConnectionService extends Service implements HostConnectionHand
       }
     }, `client-connection: ${channel} rpc interceptor`)
   }
+}
+
+function requestHeader(request: ConnectionTrustRequest, name: string): string | undefined {
+  if (request.headers instanceof Headers) return request.headers.get(name) ?? undefined
+  const value = request.headers[name]
+  return typeof value === 'string' ? value : undefined
 }
 
 function rpcFetchHandler(

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "手机远程访问",
+    "description": "通过 Tailscale 私有网络在手机上使用 DSH，仅在这台电脑上手动开启后建立连接。"
+  }
+}

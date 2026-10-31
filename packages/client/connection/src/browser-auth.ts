@@ -254,10 +254,9 @@ export class BrowserAuth {
    * 401 response.
    * @param req - incoming root or configured-index request.
    * @param res - response owned when this method returns false.
-   * @param secure - whether the listener receiving this request serves TLS; the
-   * minted cookie carries `Secure` when it does. Only that listener's own
-   * protocol decides, never a `publicUrl` announcement or a forwarded header:
-   * those describe a hop this process does not terminate.
+   * @param secure - whether Connection selected native TLS or an explicitly
+   * registered HTTPS proxy origin. Selects HTTPS audience and `Secure` cookies;
+   * neither a `publicUrl` announcement nor forwarded headers grants this policy.
    * @returns true only when the caller may serve index.html.
    */
   authorizeIndex(req: ConnectionIndexRequest, res: ConnectionIndexResponse, secure = false): boolean {
@@ -308,7 +307,7 @@ export class BrowserAuth {
    * Exchange the launch token for an independent API operator; omitted interactions default to none.
    * @param req - trusted GET request on /connect with at most one interactions declaration.
    * @param res - response owned to completion, redirecting to the API mux on success.
-   * @param secure - whether the receiving listener serves TLS.
+   * @param secure - whether Connection selected native TLS or a registered HTTPS proxy origin.
    * @param publish - synchronously create the operator before exposing its signed credential.
    */
   authorizeConnect(
@@ -350,7 +349,7 @@ export class BrowserAuth {
   /**
    * Verify the authority-bound browser cookie on a Host request.
    * @param request - request headers carrying Host and Cookie.
-   * @param secure - whether the receiving listener uses TLS, including its default port.
+   * @param secure - whether Connection selected the HTTPS cookie audience, including its default port.
    * @returns true only for an unexpired cookie signed by this activation's loaded secret.
    */
   isAuthenticated(request: ConnectionTrustRequest, secure = false): boolean {
@@ -360,7 +359,7 @@ export class BrowserAuth {
   /**
    * Verify an API credential without creating or reviving its operator.
    * @param request - request headers carrying Host and Cookie.
-   * @param secure - whether the receiving listener uses TLS.
+   * @param secure - whether Connection selected the HTTPS cookie audience.
    * @returns the signed operator id, or undefined for invalid, expired, or browser cookies.
    */
   authenticateApi(request: ConnectionTrustRequest, secure = false): PeerId | undefined {

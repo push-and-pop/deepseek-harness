@@ -244,7 +244,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-api-session-controller`
 
-- `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `remoteAccess` · `sessions` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
+- `inject`: `agentDefaultModel` · `agents` · `attachments` · `fileUploads` · `fs` · `llm` · `remoteAccess` · `sessions` · `sessionPersistence` · `sessionProjections` · `sessionQuery` · `typert` · `workspaceRegistry`
 - `source`: [`packages/api/session-controller/src/index.ts:109`](../packages/api/session-controller/src/index.ts)
 
 ```ts config-catalog
@@ -326,7 +326,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-workspace-controller`
 
 - `inject`: `remoteAccess` · `typert` · `workspaceRegistry`
-- `source`: [`packages/api/workspace-controller/src/index.ts:37`](../packages/api/workspace-controller/src/index.ts)
+- `source`: [`packages/api/workspace-controller/src/index.ts:39`](../packages/api/workspace-controller/src/index.ts)
 
 ```ts config-catalog
 /** First-use directory policy for the Host account. */
@@ -555,6 +555,34 @@ export interface Config {
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-shortcuts -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-tailscale -->
+<a id="deepseek-aidsh-client-tailscale"></a>
+
+## `@deepseek-ai/dsh-client-tailscale`
+
+- `inject`: `webServer` · `connection` · `credentials`
+- `source`: [`packages/client/tailscale/src/index.ts:19`](../packages/client/tailscale/src/index.ts)
+
+```ts config-catalog
+/** Local CLI and listener deployment choices. */
+export interface Config extends TailscaleConfig {}
+
+/** Validated plugin deployment choices. */
+export interface TailscaleConfig {
+  /** Local CLI absolute path, or the bare name tailscale resolved from system paths. */
+  readonly executable: string
+  /** Private HTTPS listener port; existing Serve or Funnel listeners are never replaced. */
+  readonly httpsPort: number
+  /** Maximum time for a CLI probe or complete listener startup, in milliseconds. */
+  readonly commandTimeoutMs: number
+  /** Grace after termination before killing the owned CLI, in milliseconds. */
+  readonly shutdownGraceMs: number
+  /** Delay between foreground proxy readiness probes, in milliseconds. */
+  readonly readinessPollMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-tailscale -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-plugin-manager -->
 <a id="deepseek-aidsh-client-ui-plugin-manager"></a>
@@ -4544,7 +4572,7 @@ export interface Config {
 
 - `inject`: `web`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/web/web-search-deepseek/src/index.ts:51`](../packages/web/web-search-deepseek/src/index.ts)
+- `source`: [`packages/web/web-search-deepseek/src/index.ts:53`](../packages/web/web-search-deepseek/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config (all optional — `apply` fills env-var and constant defaults). */

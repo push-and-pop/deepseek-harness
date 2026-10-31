@@ -39,11 +39,11 @@ kind: "package-reference"
 
 ### 服务器实施的约束
 
-请求从 dist 根目录（包含 `distIndex` 的目录）提供。dist 根目录与配置的 index 路径以 HTTP 200 渲染 `index.html`；任何其他已有文件按自身 MIME 类型直接提供，未知扩展名按 `application/octet-stream` 提供。解析到根目录之外的路径以 403 拒绝，因此精心构造的路径无法读取 dist 之上的文件。dist 根目录内不存在或不是文件的目标——文件缺失、目录或配置的 index 缺失——返回空 404。没有匹配具名路由的非 GET／HEAD 请求返回 405。回退是一个 webserver resource。每个成功的 index 响应都经 webserver 的 `renderIndex` 渲染——经 HTTP 时为 `connection.browserPeer`（Connection 浏览器认证所准入的 Peer），在 `webServer.readResource(request, peer)` 读取中为 `peer` 且跳过浏览器认证——因此启动 manifest（元数据清单）与该 Peer 的访问快照会通过 `/` 与配置的 index 路径送达页面。
+请求从 dist 根目录（包含 `distIndex` 的目录）提供。dist 根目录与配置的 index 路径以 HTTP 200 渲染 `index.html`；任何其他已有文件按自身 MIME 类型直接提供，未知扩展名按 `application/octet-stream` 提供。解析到根目录之外的路径以 403 拒绝，因此精心构造的路径无法读取 dist 之上的文件。dist 根目录内不存在或不是文件的目标——文件缺失、目录或配置的 index 缺失——返回空 404。没有匹配具名路由的非 GET／HEAD 请求返回 405。回退是一个 webserver resource。每个成功的 index 响应都经 webserver 的 `renderIndex` 渲染——经 HTTP 时为 `connection.admit` 返回的 Peer（本机浏览器 Peer 或已注册代理源的浏览器 Peer），在 `webServer.readResource(request, peer)` 读取中为 `peer` 且跳过浏览器认证——因此启动 manifest（元数据清单）与该 Peer 的访问快照会通过 `/` 与配置的 index 路径送达页面。
 
 所服务的 HTML 携带唯一的文档 base `<base href="./">`，位于每一条注入资源行之前，因此它冻结页面加载时所处的入口目录：shell 自身的应用目录相对引用与宿主的插件资源行都在服务该页面的挂载下解析。同一份 index 因而既服务源站根目录，也服务剥离前缀的代理所拥有的任一挂载；本插件只为 dist 根目录与配置的 index 路径渲染它。
 
-对根路径与配置 index 的 HTTP 请求会在读取 HTML 前调用 `ctx.connection.authorizeIndex`。有效进程 token 会得到 303 重定向与持久浏览器 cookie；已有有效 cookie 时直接提供 index；其他 index 请求得到 Connection 所有的 401 响应。非 index 文件仍是公开静态资源。Token、cookie、过期时间与签名记录语义都归 Connection 所有。
+对根路径与配置 index 的 HTTP 请求会在读取 HTML 前调用 `ctx.connection.authorizeIndex`。有效进程 token 会得到 303 重定向与持久浏览器 cookie；已有有效 cookie 时直接提供 index；其他 index 请求得到 Connection 所有的 401 响应。异步读取文件后，HTTP index 渲染会再次检查准入，防止已撤销的源收到启动数据。非 index 文件仍是公开静态资源。Token、cookie、过期时间与签名记录语义都归 Connection 所有。
 
 除 index 外，所有提供的文件都由浏览器重新验证。这类响应携带 `cache-control: no-cache` 和由文件内容 SHA-1 生成的弱 ETag，因此文件内容变化后即使名字不变也会得到新的 ETag；`If-None-Match` 等于当前 ETag 的请求得到空的 304。渲染出的 index 不带缓存头。
 

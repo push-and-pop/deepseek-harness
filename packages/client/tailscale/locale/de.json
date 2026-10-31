@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Fernzugriff",
+    "description": "Verbinde dein Smartphone über Tailscale privat mit DSH. Der Fernzugriff startet erst, wenn du ihn auf diesem PC aktivierst."
+  }
+}

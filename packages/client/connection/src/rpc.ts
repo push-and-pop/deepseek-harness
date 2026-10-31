@@ -208,12 +208,12 @@ export interface HostConnectionHandle {
   readonly rpc: HostConnectionRpc
   /** Exact Fetch routes for streaming or browser-native responses. */
   readonly fetch: HostConnectionFetch
-  /** The owner Peer every authenticated browser connection shares. */
+  /** The owner Peer shared by browser connections outside dynamically registered origins. */
   readonly browserPeer: PeerScope
 
   /**
-   * Whether this deployment accepts authorities beyond loopback: true only
-   * when a validated `trustedHosts` entry names a non-loopback hostname.
+   * Whether configuration or a live HTTPS proxy registration accepts an
+   * authority beyond loopback; the listener's bind address does not count.
    */
   readonly allowsRemoteAuthorities: boolean
 
@@ -256,9 +256,23 @@ export interface HostConnectionHandle {
   admitConnection(request: ConnectionTrustRequest): ConnectionAdmission
 
   /**
-   * Authenticate one frontend index request, owning a token redirect or 401.
-   * The cookie this mints is `Secure` when the mounted Web carrier serves TLS,
-   * which only that listener's protocol decides.
+   * Register an exact HTTPS origin served by a trusted TLS-terminating proxy.
+   * The proxy must preserve Host and serve only HTTPS for this authority; no
+   * forwarded header establishes trust. Matching requests use HTTPS-bound Secure
+   * cookies and still require authentication and a matching Origin when present.
+   * @param origin - canonical HTTPS origin, optionally with a final slash; no URL credentials, path, query, fragment, or wildcard.
+   * @returns calling-Context-owned disposer; overlapping registrations remain active
+   * until the last is released. Last release blocks subsequent admission and awaits
+   * disposal of this origin's browser and API Peers, closing their sockets and
+   * aborting streams. Already-admitted unary calls retain request-level cancellation.
+   * @throws Error when the URL is invalid or Connection has been disposed.
+   */
+  registerTrustedOrigin(origin: string): () => Promise<void>
+
+  /**
+   * Authenticate one frontend index request, owning a token redirect, 401, or 403.
+   * Cookies are `Secure` for native TLS or an explicitly registered HTTPS proxy
+   * origin, never because of an advertisement or forwarded header.
    * @param request - root or configured-index HTTP request.
    * @param response - response owned when the result is false.
    * @returns true only when the frontend may serve index.html.

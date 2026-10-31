@@ -84,6 +84,10 @@ Neither the advertised URL nor the browser-trust fence protects the port itself,
 
 The printed URL contains a process credential; share it only with intended users. `printUrl: false` suppresses the line with or without `--public-url`, and the credential never appears in the model context or in `DSH_WEB_URL`.
 
+### Private phone access
+
+**Settings → Remote access** manages [Tailscale private HTTPS access](../../client/tailscale/README.md) from the local PC. Install and sign into Tailscale on the PC and iPhone first; no purchased domain, public IP, or router port forwarding is required. The plugin stays inactive until enabled, retains DSH authentication, and stops its owned listener on disable or application exit.
+
 ### Running over SSH
 
 When you launch `dsh --profile web` over SSH, the URL line still prints but the browser is not opened for you: the SSH client or editor owns the local forwarding address. Without an advertised root the printed URL names the remote host's bind-address endpoint — loopback for a loopback bind — which you reach through your forwarding address. With `--public-url` the printed URL is the authenticated advertised root; the browser handoff stays suppressed, because opening a browser on the remote host cannot reach your screen.

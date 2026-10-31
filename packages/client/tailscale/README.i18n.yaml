@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/tailscale/README.md
+/:
+  en: 263ae7f83ebce94d
+  zh: 239eb3cfdb80e898
+/deepseek-ai-dsh-client-tailscale:
+  en: 700d0394689f7e10
+  zh: 5c9e46432d0e1387
+/deepseek-ai-dsh-client-tailscale/summary:
+  en: ac1363a2cb2c500a
+  zh: 7a231e1f1d755760
+/deepseek-ai-dsh-client-tailscale/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 72a6f7ac5fa8a55a
+/deepseek-ai-dsh-client-tailscale/use-this-package:
+  en: 4827a689e02c98b8
+  zh: ffe6cac04a9fccba
+/deepseek-ai-dsh-client-tailscale/use-this-package/stable-links-across-restarts:
+  en: 469ae39b5d75d119
+  zh: 387e95fb582599d4
+/deepseek-ai-dsh-client-tailscale/use-this-package/configuration:
+  en: 3f21df3adb8acf10
+  zh: 6c44cf2e6ee0d61a
+/deepseek-ai-dsh-client-tailscale/understand-the-implementation:
+  en: 2da3e13c6aad99e9
+  zh: bbbd95c289c812fc
+/deepseek-ai-dsh-client-tailscale/further-exploration:
+  en: fdd5ff7e9ac0524a
+  zh: 741ed5efdc1f49de
+/deepseek-ai-dsh-client-tailscale/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-client-tailscale/model-experience/model-request-content:
+  en: 02b0dd014606a350
+  zh: ad918aed66b58b2b
+/deepseek-ai-dsh-client-tailscale/model-experience/model-request-content/what-the-model-sees:
+  en: 09624bffd8b6d0a0
+  zh: 604ba6732a452177
+/deepseek-ai-dsh-client-tailscale/model-experience/model-request-content/token-effect:
+  en: 4c35a02a813035c2
+  zh: 58e5106770eda50e
+/deepseek-ai-dsh-client-tailscale/model-experience/model-request-content/kv-cache-effect:
+  en: d023e9a14ca717a0
+  zh: 05153a74a168f328
+/deepseek-ai-dsh-client-tailscale/known-limitations-and-deferred-work:
+  en: 550032d32610b208
+  zh: 9ad3f2fa03730e67
+/deepseek-ai-dsh-client-tailscale/known-limitations-and-deferred-work/dev-note:
+  en: cee7004de863efc2
+  zh: 1cb253c1c57701cb

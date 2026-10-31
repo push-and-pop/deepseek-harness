@@ -7,6 +7,7 @@
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { request as httpRequest, type IncomingHttpHeaders } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -267,6 +268,41 @@ describe('real Loader composition', () => {
     await expect(read('/bad%00path')).rejects.toThrow()
     await rm(join(root!, 'dist', 'index.html'))
     expect((await read('/')).status).toBe(404)
+  })
+
+  it('renders proxy bootstrap for its admitted origin Peer and refuses it after revocation', async () => {
+    const loaded = await loadComposition()
+    const origin = 'https://phone.example.ts.net:8443'
+    const release = loaded.connection.registerTrustedOrigin(origin)
+    const host = new URL(origin).host
+    const base = loaded.webServer.getOrigin()
+    type Reply = { status: number | undefined; headers: IncomingHttpHeaders; body: string }
+    const read = (path: string, cookie?: string): Promise<Reply> => new Promise((resolve, reject) => {
+      const request = httpRequest(`${base}${path}`, { headers: { host, origin, ...cookie === undefined ? {} : { cookie } } }, (response) => {
+        response.setEncoding('utf8')
+        let body = ''
+        response.on('data', (chunk: string) => { body += chunk })
+        response.on('end', () => { resolve({ status: response.statusCode, headers: response.headers, body }) })
+      })
+      request.on('error', reject)
+      request.end()
+    })
+    const loginUrl = new URL(loaded.connection.authenticatedUrl(origin))
+    const login = await read(`/${loginUrl.search}`)
+    expect(login.status).toBe(303)
+    expect(login.headers['set-cookie']?.[0]).toContain('Secure')
+    const cookie = login.headers['set-cookie']?.[0]?.split(';')[0]
+    if (cookie === undefined) throw new Error('fixture did not authenticate the proxy')
+    const admission = loaded.connection.admit({ headers: { host, origin, cookie } })
+    if ('rejection' in admission) throw new Error('fixture proxy admission failed')
+    expect(admission.peer).not.toBe(loaded.connection.browserPeer)
+    const renderedFor: Connection.PeerScope[] = []
+    loaded.on('webserver/index-inject', (_rows, peer) => { renderedFor.push(peer) })
+    expect((await read('/', cookie)).status).toBe(200)
+    expect(renderedFor).toEqual([admission.peer])
+    await release()
+    expect((await read('/', cookie)).status).toBe(403)
+    expect(renderedFor).toHaveLength(1)
   })
 
   it('lets browsers revalidate every file except the index', { timeout: 60_000 }, async () => {
