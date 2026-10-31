@@ -304,9 +304,10 @@ describe('the shipped Web composition', () => {
       const persona = assembly.sections.find(section => section.name === 'deployment:persona-prefix')?.text ?? ''
       expect(persona).toContain('Thinking Disruption')
       expect(persona).toContain(`Your working directory is ${REPO_ROOT}.`)
-      expect(persona).toContain('R0.5')
+      expect(persona.length).toBeLessThan(6000)
+      expect(persona).not.toContain('R0.5')
       expect(assembly.sections.map(section => section.name).sort()).toEqual([
-        'deployment:persona-prefix', 'plan:policy', 'tools:ptc-only', 'tools:sdk',
+        'deployment:persona-prefix', 'plan:policy', 'tool:goal', 'tools:ptc-only', 'tools:sdk',
       ])
       expect(toolNames(ctx, handle.agent)).toEqual(expect.arrayContaining(['fact_register', 'tool_activate', 'skill', 'read', 'subagent']))
       expect(ctx.agentPresets.defaultId).toBe('standard')
@@ -317,7 +318,7 @@ describe('the shipped Web composition', () => {
       expect(request).toBeDefined()
       expect(request?.tools?.map(tool => tool.name)).toEqual(['run_code'])
       const messages = handle.agent.session.deriveMessages()
-      const catalogs = messages.filter(message => String(message.source.kind) === 'liangshen-tool-catalog')
+      const catalogs = messages.filter(message => ['liangshen-tool-catalog'].includes(message.source.kind))
       expect(catalogs).toHaveLength(1)
       expect(JSON.stringify(catalogs[0])).toContain('fact_register')
       expect(messages.some(message => message.role === 'assistant')).toBe(true)
@@ -333,6 +334,7 @@ describe('the shipped Web composition', () => {
           "sections": [
             "deployment:persona-prefix",
             "plan:policy",
+            "tool:goal",
             "tools:ptc-only",
             "tools:sdk",
           ],
@@ -348,7 +350,7 @@ describe('the shipped Web composition', () => {
 
   it('composes the full agent from `standard`', async () => {
     const handle = await ctx.agents.create({
-      sessionId: SessionId('preset-standard'),
+      sessionId: SessionId(`preset-standard-${randomUUID()}`),
       setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'standard').then(() => undefined),
     })
     try {
@@ -364,7 +366,7 @@ describe('the shipped Web composition', () => {
         'send_message', 'skill',
         'subagent', 'subagent_fork', 'todo_write', 'update_goal', 'web_fetch', 'web_search',
         'workflow', 'working_directory', 'write',
-      ])
+      ].map(name => name === 'bash' && process.platform === 'win32' ? 'pwsh' : name).sort())
       expect(ctx.commands.find(handle.agent, 'goal')).toBeDefined()
     } finally {
       await handle.dispose()

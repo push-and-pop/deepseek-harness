@@ -18,6 +18,8 @@
  * oldest, returning its tools to the paged summary.
  */
 
+import { settleEvent } from './settlements.mjs'
+
 /** The default paging pattern: every MCP-bridged tool (`mcp__<server>__<fn>`). */
 export const DEFAULT_PAGED_TOOL_PATTERNS = ['mcp__*']
 
@@ -141,17 +143,20 @@ export function inactiveNamespaces(tools, patterns, activeNamespaces) {
   return partitionWireTools(tools, patterns, activeNamespaces).inactive
 }
 
-/** Parse one tool/call event's arguments, tolerating the JSON-string form. */
-function callArguments(data) {
-  let args = data?.arguments
-  if (typeof args === 'string') {
-    try {
-      args = JSON.parse(args)
-    } catch {
-      return undefined
-    }
-  }
-  return args !== null && typeof args === 'object' ? args : undefined
+/**
+ * Apply one successfully settled call to the oldest-first namespace LRU.
+ * @param {readonly string[]} active - Previously active namespaces.
+ * @param {{ name: string, arguments: Record<string, unknown> }} call - Normalized successful call.
+ * @param {{ patterns: readonly string[], capacity: number }} options - Canonical paging settings.
+ * @returns {readonly string[]} Updated namespaces, or the same reference when unchanged.
+ */
+export function applyPaging(active, call, { patterns, capacity }) {
+  const activation = call.name === TOOL_ACTIVATE_NAME
+  const namespace = activation ? call.arguments?.namespace : namespaceOf(call.name, patterns)
+  if (typeof namespace !== 'string' || namespace === '') return active
+  if (!activation && !active.includes(namespace)) return active
+  if (active.at(-1) === namespace && active.length <= capacity) return active
+  return [...active.filter(entry => entry !== namespace), namespace].slice(-capacity)
 }
 
 /**
@@ -182,32 +187,18 @@ export function resultIsError(data) {
  */
 export function replayActivations(events, capacity = DEFAULT_MAX_ACTIVE_NAMESPACES, patterns = DEFAULT_PAGED_TOOL_PATTERNS) {
   const list = Array.isArray(events) ? events : []
-  const pending = new Map()
-  const active = []
+  let pending = {}
+  let active = []
   const evicted = []
-  const touch = (namespace) => {
-    const index = active.indexOf(namespace)
-    if (index >= 0) active.splice(index, 1)
-    active.push(namespace)
-    while (active.length > capacity) evicted.push(active.shift())
-  }
   for (const event of list) {
-    if (event?.type === 'tool/call') {
-      pending.set(event.data.callId, event.data)
-      continue
+    const settled = settleEvent(pending, event)
+    pending = settled.pending
+    if (settled.call === undefined) continue
+    const next = applyPaging(active, settled.call, { patterns, capacity })
+    for (const namespace of active) {
+      if (!next.includes(namespace)) evicted.push(namespace)
     }
-    if (event?.type !== 'tool/result') continue
-    const message = event.data.message
-    const data = pending.get(message.source.callId)
-    pending.delete(message.source.callId)
-    if (data === undefined || message.isError !== false || resultIsError(event.data)) continue
-    if (data.name === TOOL_ACTIVATE_NAME) {
-      const namespace = callArguments(data)?.namespace
-      if (typeof namespace === 'string' && namespace !== '') touch(namespace)
-      continue
-    }
-    const namespace = namespaceOf(data.name, patterns)
-    if (namespace !== undefined && active.includes(namespace)) touch(namespace)
+    active = next
   }
   return { active, evicted }
 }

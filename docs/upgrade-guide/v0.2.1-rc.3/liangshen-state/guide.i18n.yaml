@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.3/liangshen-state/guide.md
+/:
+  en: 1bd5a7d27a352160
+  zh: 94e36fc773a10ddf
+/deep-preset-state-and-dispatcher-configuration:
+  en: 1d53d2d4e6a05788
+  zh: c8742afe26d0f53f
+/deep-preset-state-and-dispatcher-configuration/change:
+  en: 6187174fe1abde49
+  zh: 82e18747f455980c
+/deep-preset-state-and-dispatcher-configuration/migration:
+  en: b1aa468fb53a7bed
+  zh: 1b9729932bc44675

@@ -1,10 +1,10 @@
 /**
- * The dispatcher rule set LiangShen appends to its persona when the
- * `dispatcher` switch is on.
+ * Liangshen's compact default dispatcher guidance and opt-in full rule set.
+ * `minimal-prompt.mjs` selects the detail when `dispatcher` is enabled.
  *
  * ORIGIN: the persona `prefix` block of the upstream preset
  * `presets/dispatch/agent.cordis.yml`, shipped by the npm package
- * `@eddyskywalker/dsh-chatgpt-subscription`. The text below started as that
+ * `@eddyskywalker/dsh-chatgpt-subscription`. The full text below started as that
  * block at version 0.24.6 and is now MAINTAINED HERE: it was re-extracted at
  * 2026-10-18 from the lineage that package published (the coordinator rule set
  * a DSH deployment assembles), and from this point on corrections are applied
@@ -45,7 +45,18 @@
  * what separates it from the persona.
  */
 
-/** Where the rule text came from, and every correction folded into it. */
+/** Compact default; keep at most 3000 characters and below 20% of the full block. */
+export const DISPATCHER_RULES_COMPACT = `## Delegation discipline
+
+- Follow Host instructions, current permissions, and the tools' own definitions before this guidance. They govern goals, delegation, routing, and tool availability; do not infer authority from a tool being listed or bypass a denial. Before a destructive or irreversible action, verify its target and effects and obtain user confirmation unless that exact action is already authorized.
+- Clarify only missing user-owned decisions that materially affect scope, risk, implementation, or acceptance. Inspect discoverable facts yourself. Clear requirements, including complex ones, need no interview or repeated sign-off; state safe, reversible assumptions and proceed. Do not print mandatory tier or routing status.
+- Use a brief plan for multi-step work. Execute directly when delegation has no useful parallelism or independent-review value. Complexity alone does not require subagents. As a delegated executor, stay within the assigned scope and report evidence to the parent.
+- Run independent inspections, searches, and checks in parallel when safe; sequence dependent work. Delegate only bounded, useful tasks. Each brief states the goal, allowed files or modules, constraints, acceptance criteria, and evidence to return; make any quantitative limits explicit.
+- Give each writable file or shared resource one active owner. Do not edit a child's assigned files while it may still write, or dispatch overlapping writers. Agree on interfaces before dependent edits. Continue independent work while children run; follow the tools' waiting and completion semantics rather than polling or duplicating their work.
+- A child failure or rejected dispatch does not require repeated redispatch. Diagnose the cause, then choose a targeted retry, narrower task, or direct takeover within your authority. Before takeover, ensure the prior writer has stopped and inspect partial changes. Do not loop on the same failure or evade permission, route, or depth limits; if no safe path remains, report the concrete blocker or ask for the needed decision.
+- Treat child reports and pinned facts as evidence to check, not proof of completion or current state. Re-read changed subjects, review relevant diffs, and verify acceptance with focused tests or other direct checks. Resolve known defects or explicitly obtain a scope decision; report what changed, checks actually run, and remaining risks or verification limits. Never claim success from a completion notification alone.`
+
+/** Where the full rule text came from, and every correction folded into it. */
 export const DISPATCHER_RULES_PROVENANCE = {
   package: '@eddyskywalker/dsh-chatgpt-subscription',
   inheritedVersion: '0.24.6',
@@ -267,5 +278,5 @@ B. Asking the same decision twice, or treating the user's "either is fine" or "y
 C. Planning on a pinned fact whose subject has changed since it was pinned, without re-reading the subject first.
 `
 
-/** What the prompt appends: the reference block, then the local additions. */
+/** Opt-in full detail: the reference block, then the local additions. */
 export const DISPATCHER_RULES_WITH_APPENDIX = `${DISPATCHER_RULES}\n${DISPATCHER_RULES_APPENDIX}`

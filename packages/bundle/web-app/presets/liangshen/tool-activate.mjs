@@ -1,27 +1,24 @@
-/** Activation of inherited MCP namespaces for the next admitted request. */
-import z from '@deepseek-ai/schemastery'
+/** Request inherited namespace activation for the next admitted request. */
 import { scopeChainOf } from '@deepseek-ai/dsh-scope'
-import { integerAtLeast, namespaceOf, replayActivations, validatePagedToolPatterns } from './paging.mjs'
+import { namespaceOf } from './paging.mjs'
 
 /** Loader identity. */
 export const name = 'liangshen-tool-activate'
-/** Registry dependency. */
-export const inject = ['tools']
-/** Paging settings must match the catalog and working-context rows. */
-export const Config = z.object({
-  pagedToolPatterns: z.array(z.string()).default(['mcp__*']),
-  maxActiveNamespaces: z.natural().min(1).default(3),
-})
+/** Tool registration and the preset's canonical projected paging state. */
+export const inject = ['tools', 'liangshenState']
 
-/** Register the activation tool; successful calls are replayed from the durable log. */
-export function apply(ctx, config = {}) {
-  const patterns = validatePagedToolPatterns(name, config.pagedToolPatterns)
-  const capacity = integerAtLeast(name, config.maxActiveNamespaces, 'maxActiveNamespaces', 1, 3)
+/**
+ * Register activation requests; successful native and PTC settlements update state.
+ * @param {object} ctx - Cordis context with tools and Liangshen state.
+ * @returns {void} The tool is removed with its owning fiber.
+ */
+export function apply(ctx) {
+  const { patterns, capacity } = ctx.liangshenState.pagingOptions()
   ctx.effect(() => ctx.tools.register({
     name: 'tool_activate',
-    description: `Activate a paged namespace named in the tool catalog. Its tools become callable from the next request, including through run_code. At most ${capacity} namespaces stay active; the least recently used is evicted.`,
+    description: `Request a registered namespace from the tool catalog for the next admission, including through run_code. Repeating an active namespace refreshes its recency. At most ${capacity} namespaces stay active; the oldest is evicted. Session policies, tool conditions and the configured schema budget may still withhold tools.`,
     parameters: {
-      type: 'object', properties: { namespace: { type: 'string', description: 'Exact namespace from the inactive tool catalog.' } },
+      type: 'object', properties: { namespace: { type: 'string', description: 'Exact registered namespace from the tool catalog.' } },
       required: ['namespace'], additionalProperties: false,
     },
     output: {
@@ -35,12 +32,9 @@ export function apply(ctx, config = {}) {
       const namespace = args.namespace
       const parent = scopeChainOf(exec.agent)[1]
       const available = new Set(ctx.tools.schemas(parent).map(tool => namespaceOf(tool.name, patterns)).filter(Boolean))
-      if (!available.has(namespace)) throw new Error(`Unknown paged namespace "${namespace}". Available: ${[...available].sort().join(', ') || '(none)'}`)
-      const events = exec.agent.session.snapshotEvents().filter(event => !(event.type === 'tool/call' && event.data.callId === exec.callId))
-      const { active } = replayActivations(events, capacity, patterns)
-      if (active.includes(namespace)) throw new Error(`Namespace "${namespace}" is already active`)
-      const evicted = active.length >= capacity ? active[0] : undefined
-      return { text: `Activated "${namespace}" for the next request.${evicted === undefined ? '' : ` Paged out "${evicted}" (least recently used).`}` }
+      if (!available.has(namespace)) throw new Error(`Unknown registered namespace "${namespace}". Available: ${[...available].sort().join(', ') || '(none)'}`)
+      const { active } = ctx.liangshenState.paging(exec.agent.session)
+      return { text: `${active.includes(namespace) ? 'Recency refresh' : 'Activation'} requested for "${namespace}" at the next admission. The namespace limit or schema budget may defer older namespaces; session policies and tool conditions still apply.` }
     },
   }), 'liangshen.tool-activate')
 }

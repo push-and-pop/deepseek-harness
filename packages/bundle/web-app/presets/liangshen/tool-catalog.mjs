@@ -1,28 +1,44 @@
 /** Compact, durable tool catalog with Agent-scoped namespace paging. */
+import { Buffer } from 'node:buffer'
 import z from '@deepseek-ai/schemastery'
-import {
-  integerAtLeast, namespaceOf, partitionWireTools, replayActivations,
-  summarizeInactive, validatePagedToolPatterns,
-} from './paging.mjs'
+import { scopeChainOf } from '@deepseek-ai/dsh-scope'
+import { integerAtLeast, namespaceOf, partitionWireTools, summarizeInactive } from './paging.mjs'
 
 /** Cordis plugin identity and durable message source. */
 export const name = 'liangshen-tool-catalog'
 /** Registries used for admission, paging and prompt observation. */
-export const inject = ['systemPrompt', 'tools']
+export const inject = ['systemPrompt', 'tools', 'liangshenState']
 /** Validated deployment controls; presentation belongs to the selected executor. */
 export const Config = z.object({
   descriptionMaxLength: z.natural().min(1).default(200),
-  pagedToolPatterns: z.array(z.string()).default(['mcp__*']),
-  maxActiveNamespaces: z.natural().min(1).default(3),
   maxResidentTokens: z.natural().min(1).default(8000),
+  budgetMode: z.union(['warn', 'enforce']).default('warn'),
 })
-const DEFAULT_DESCRIPTION_MAX_LENGTH = 200
 const MAX_SIGNATURE_DEPTH = 4
 const SCALAR_TYPES = new Set(['string', 'number', 'integer', 'boolean', 'null'])
 
-/** Estimate serialized schema tokens for the diagnostic budget. */
+/**
+ * Measure the serialized capability-schema array, excluding SDK, catalog and history.
+ * @param {object[]} schemas - Capability schemas after scoped admission.
+ * @returns {{ schemaCount: number, characters: number, bytes: number, estimatedTokens: number }} JSON UTF-16 length, UTF-8 bytes and the characters/4 estimate.
+ */
+export function measureSurface(schemas) {
+  const serialized = JSON.stringify(schemas)
+  return {
+    schemaCount: schemas.length,
+    characters: serialized.length,
+    bytes: Buffer.byteLength(serialized, 'utf8'),
+    estimatedTokens: Math.ceil(serialized.length / 4),
+  }
+}
+
+/**
+ * Estimate only serialized capability-schema tokens, not total request tokens.
+ * @param {object[]} schemas - Capability schemas to serialize.
+ * @returns {number} Rounded-up characters/4 estimate.
+ */
 export function estimateSurfaceTokens(schemas) {
-  return Math.ceil(schemas.reduce((total, schema) => total + JSON.stringify(schema).length, 0) / 4)
+  return measureSurface(schemas).estimatedTokens
 }
 export const CURATED_TOOL_SUMMARIES = new Map([
   ['bash', 'Run a command in a fresh bash shell (`command`, optional `timeoutMs`, `workdir`, `run_in_background`).'],
@@ -51,7 +67,7 @@ export const CURATED_TOOL_SUMMARIES = new Map([
   ['ask_user_question', 'Ask the user a concise question and wait for the answer (`questions`: id, question, optional header, options, and custom input).'],
   ['web_search', 'Search the web for current information (one to four `queries`); returns a merged summary and its source URLs.'],
   ['skill', 'Load the full instructions of one session skill (`name`); call it before acting on a task that names or matches a skill.'],
-  ['tool_activate', 'Load one paged tool namespace back onto the wire and into the generated SDK (`namespace`, exactly as the catalog names it).'],
+  ['tool_activate', 'Request one registered namespace for the next admission (`namespace`, exactly as the catalog names it); repeat to refresh recency.'],
   ['fact_register', 'Pin one key fact into the working context (`fact`, optional `tag`), or unpin with `revoke`; at most twelve short facts stay pinned.'],
   ['ralph', 'Run a foreground fresh-agent Ralph loop toward one immutable objective (`objective`, optional `maxRounds`); only when the human explicitly asks for it.'],
   ['list_mcp_resources', 'List the resources an MCP server exposes (`server`, optional `cursor`).'],
@@ -173,7 +189,7 @@ export function catalogEntries(schemas, maxLength, options) {
 const PTC_PROGRAM_LINES = [
   'Only `run_code` is directly callable. Reach the listed capabilities through the generated SDK; follow its program format and the `run_code` input schema.',
   'Batch independent read-only calls in one program and return only the evidence needed for the next decision.',
-  'Inactive namespaces are absent from the SDK and cannot be invoked until activated. Activation takes effect on the next request.',
+  'Inactive namespaces are absent from the SDK and cannot be invoked. Successful activation requests are considered at the next admission, subject to the schema budget and session policies.',
 ]
 /**
  * Model-facing catalog text.
@@ -208,7 +224,7 @@ export function renderCatalogText(entries, presentation = 'native', inactive = [
       ]
   const footer = inactive.length === 0
     ? 'This is the complete current list and replaces any earlier available-tools list in this session.'
-    : 'This is the current on-wire list and replaces any earlier available-tools list in this session.'
+    : `This is the current ${presentation === 'ptc' ? 'SDK-reachable' : 'on-wire'} list and replaces any earlier available-tools list in this session.`
   // The paged-out summary states its own reachability per presentation, because
   // the presentations differ on exactly the fact a reader would otherwise have
   // to infer from the program contract further down: 'ptc' pages the whole
@@ -219,6 +235,7 @@ export function renderCatalogText(entries, presentation = 'native', inactive = [
   const inactiveBlock = inactive.length === 0 ? [] : [
     '',
     'These tool namespaces are registered but currently paged out of the wire:',
+    'Activation requests their tools for the next admission; session policies, tool conditions and the configured schema budget still apply.',
     inactiveReachability,
     '<inactive_namespaces>',
     ...inactive.map(ns => `- \`${ns.namespace}\` (${ns.count} tool${ns.count === 1 ? '' : 's'}${ns.sample === '' ? '' : `, e.g. \`${ns.sample}\``}): ${ns.description} Call \`tool_activate({ namespace: "${ns.namespace}" })\` to activate it.`),
@@ -253,76 +270,186 @@ function textOf(message) {
   return message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
 }
 
-/** Register paging before step admission and inject the observed admitted catalog. */
+class CatalogPagingError extends Error {
+  constructor(message, options) {
+    super(`${name}: ${message}`, options)
+    this.name = 'CatalogPagingError'
+    this.code = 'LIANGSHEN_PAGING_FAILED'
+  }
+}
+
+class CatalogBudgetError extends Error {
+  constructor(measurement, budget) {
+    super(`${name}: resident capability schemas alone require an estimated ${measurement.estimatedTokens} tokens (${measurement.characters} JSON characters, ${measurement.bytes} UTF-8 bytes), exceeding maxResidentTokens=${budget}. No resident tools were removed. Raise maxResidentTokens, use budgetMode="warn", or reduce resident tool schemas; this estimate excludes SDK, catalog and request history.`)
+    this.name = 'CatalogBudgetError'
+    this.code = 'LIANGSHEN_RESIDENT_BUDGET_EXCEEDED'
+    this.measurement = measurement
+    this.budget = budget
+  }
+}
+
+/**
+ * Keep inherited paging masks current and publish the admitted catalog.
+ * @param {object} ctx - Cordis context with required registries and Liangshen state.
+ * @param {object} config - Description and serialized-capability-schema budget settings.
+ * @returns {void} Contributions are released with the owning plugin fiber.
+ */
 export function apply(ctx, config = {}) {
   const descriptionMaxLength = integerAtLeast(name, config.descriptionMaxLength, 'descriptionMaxLength', 1, 200)
-  const patterns = validatePagedToolPatterns(name, config.pagedToolPatterns)
-  const capacity = integerAtLeast(name, config.maxActiveNamespaces, 'maxActiveNamespaces', 1, 3)
   const budget = integerAtLeast(name, config.maxResidentTokens, 'maxResidentTokens', 1, 8000)
+  const budgetMode = config.budgetMode ?? 'warn'
+  if (budgetMode !== 'warn' && budgetMode !== 'enforce') throw new TypeError(`${name}: budgetMode must be "warn" or "enforce"`)
+  const { patterns } = ctx.liangshenState.pagingOptions()
   const paging = new Map()
   const catalogs = new WeakMap()
   const agentBySession = new WeakMap()
   const pagingErrors = new WeakMap()
-  const warned = new WeakSet()
+  const observations = new WeakMap()
+  let syncing = false
+  let dirty = false
+  let disposing = false
 
+  const replaceMask = (agent, full, active, deferred) => {
+    const previous = paging.get(agent)
+    const effective = active.filter(namespace => !deferred.includes(namespace))
+    const { inactive } = partitionWireTools(full, patterns, effective)
+    const deny = [...inactive.values()].flatMap(tools => tools.map(tool => tool.name)).sort()
+    if (deny.includes('tool_activate')) throw new CatalogPagingError('pagedToolPatterns must not hide tool_activate; narrow the configured prefixes')
+    const unchanged = previous.deny.length === deny.length && previous.deny.every((value, index) => value === deny[index])
+    // Intersect the successor with the old mask before disposing the old effect.
+    const dispose = unchanged ? previous.dispose : deny.length === 0 ? () => {} : agent.ctx.tools.restrict({ deny })
+    paging.set(agent, { full, active, deferred, inactive, deny, dispose })
+    if (!unchanged) previous.dispose()
+  }
+  const sync = (agent) => {
+    const previous = paging.get(agent)
+    const parent = scopeChainOf(agent)[1]
+    const inherited = new Map(ctx.tools.definitions(parent).map(tool => [tool.name, tool]))
+    for (const tool of ctx.tools.definitions(agent)) {
+      if (namespaceOf(tool.name, patterns) !== undefined && inherited.get(tool.name) !== tool) {
+        throw new CatalogPagingError(`cannot page Agent-local tool "${tool.name}"; move matching registrations to the Host or preset scope`)
+      }
+    }
+    const full = ctx.tools.schemas(parent)
+    // Tool changes must not advance activation or undo budget exclusions mid-step.
+    const active = previous.active ?? ctx.liangshenState.paging(agent.session).active
+    const deferred = previous.active === undefined ? [] : previous.deferred
+    replaceMask(agent, full, active, deferred)
+  }
+  const refresh = () => {
+    if (disposing) return
+    if (syncing) { dirty = true; return }
+    syncing = true
+    try {
+      do {
+        dirty = false
+        for (const agent of paging.keys()) {
+          try {
+            sync(agent)
+            pagingErrors.delete(agent)
+          } catch (cause) {
+            const error = cause instanceof CatalogPagingError ? cause
+              : new CatalogPagingError('could not update namespace paging; the previous mask is retained and request preparation is blocked. Check inherited tool registrations and paging configuration', { cause })
+            if (pagingErrors.get(agent)?.message !== error.message) ctx.logger.error(error)
+            pagingErrors.set(agent, error)
+          }
+        }
+      } while (dirty)
+    } finally { syncing = false }
+  }
   const release = (agent) => {
     const previous = paging.get(agent)
     paging.delete(agent)
     previous?.dispose()
-  }
-  const sync = (agent) => {
-    release(agent)
-    const full = ctx.tools.schemas(agent)
-    const active = replayActivations(agent.session.snapshotEvents(), capacity, patterns).active
-    const { inactive } = partitionWireTools(full, patterns, active)
-    const deny = [...inactive.values()].flatMap(tools => tools.map(tool => tool.name))
-    try {
-      const dispose = deny.length === 0 ? () => {} : agent.ctx.tools.restrict({ deny })
-      paging.set(agent, { inactive, dispose })
-      pagingErrors.delete(agent)
-    } catch (cause) {
-      const error = new Error(`${name}: namespace paging requires inherited tools; move matching Agent-local registrations to the Host or preset scope`, { cause })
-      pagingErrors.set(agent, error)
-      throw error
-    }
+    catalogs.delete(agent)
+    pagingErrors.delete(agent)
+    observations.delete(agent)
   }
 
-  ctx.on('agent/created', ({ agent }) => {
+  const track = (agent) => {
     agentBySession.set(agent.session, agent)
-    sync(agent)
-  })
-  // Inbox claiming precedes admission; step/end also covers tool-only continuations.
-  ctx.on('agent/inbox/claimed', ({ agent }) => sync(agent))
+    paging.set(agent, { full: [], active: undefined, deferred: [], inactive: new Map(), deny: [], dispose: () => {} })
+    refresh()
+    const error = pagingErrors.get(agent)
+    if (error !== undefined) throw error
+  }
+  ctx.on('tools/change', refresh)
+  ctx.on('agent/created', ({ agent }) => track(agent))
+  ctx.on('agent/inbox/claimed', refresh)
   ctx.on('session/event', (session, event) => {
-    if (event.type !== 'step/end') return
     const agent = agentBySession.get(session)
-    if (agent !== undefined) sync(agent)
+    const previous = paging.get(agent)
+    if (previous === undefined) return
+    if (event.type === 'assistant/message' && event.data.usage !== undefined) {
+      const { provider, model } = event.data.message.source
+      // Persisted response accounting is separate from schema estimates and future-request forecasts.
+      ctx.logger.debug(`${name}: ${JSON.stringify({
+        kind: 'provider-reported-request-usage', ...event.data.usage,
+        ...provider === undefined ? {} : { provider },
+        ...model === undefined ? {} : { model },
+      })}`)
+      return
+    }
+    if (event.type !== 'step/end') return
+    // The settled step no longer needs its transient budget exclusions.
+    previous.active = undefined
+    refresh()
   })
   ctx.on('agent/disposed', ({ agent }) => {
+    agentBySession.delete(agent.session)
     release(agent)
-    catalogs.delete(agent)
   })
   ctx.effect(() => () => {
+    disposing = true
     for (const agent of [...paging.keys()]) release(agent)
   }, 'liangshen.catalog.paging')
 
   ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
-    const assembled = await next()
     const agent = context.scope
-    if (agent?.session === undefined) return assembled
+    if (agent?.session === undefined) return next()
+    // A reloaded catalog may first encounter an existing Agent during assembly.
+    if (!paging.has(agent)) track(agent)
     const pagingError = pagingErrors.get(agent)
     if (pagingError !== undefined) throw pagingError
-    const surface = ctx.tools.schemas(agent, context.toolSet)
-    const presentation = assembled.sections.some(section => section.name === 'tools:ptc-only' && section.text !== '')
-      ? 'ptc' : 'native'
-    const entries = catalogEntries(surface, descriptionMaxLength, { patterns })
-    const inactive = summarizeInactive(paging.get(agent)?.inactive, value => catalogDescription(value, descriptionMaxLength))
-    catalogs.set(agent, { entries, presentation, inactive })
-    const estimated = estimateSurfaceTokens(surface)
-    if (estimated > budget && !warned.has(agent)) {
-      warned.add(agent)
-      ctx.logger.warn(`${name}: admitted tool schemas are approximately ${estimated} tokens, exceeding maxResidentTokens=${budget}; configure pagedToolPatterns to defer additional namespaces`)
+    const before = ctx.tools.schemas(agent, context.toolSet)
+    const initial = measureSurface(before)
+    if (budgetMode === 'enforce' && initial.estimatedTokens > budget) {
+      const resident = before.filter(tool => namespaceOf(tool.name, patterns) === undefined)
+      const residentMeasurement = measureSurface(resident)
+      if (residentMeasurement.estimatedTokens > budget) throw new CatalogBudgetError(residentMeasurement, budget)
+      const previous = paging.get(agent)
+      const deferred = [...previous.deferred]
+      let remaining = before
+      for (const namespace of previous.active) {
+        if (measureSurface(remaining).estimatedTokens <= budget) break
+        if (!remaining.some(tool => namespaceOf(tool.name, patterns) === namespace)) continue
+        deferred.push(namespace)
+        remaining = remaining.filter(tool => namespaceOf(tool.name, patterns) !== namespace)
+      }
+      syncing = true
+      try { replaceMask(agent, previous.full, previous.active, deferred) }
+      finally { syncing = false }
+      if (dirty) refresh()
     }
+    const assembled = await next()
+    const surface = ctx.tools.schemas(agent, context.toolSet)
+    const observation = {
+      kind: 'serialized-capability-schemas', budgetMode, maxResidentTokens: budget,
+      before: initial, admitted: measureSurface(surface), deferredNamespaces: paging.get(agent).deferred,
+      excludes: ['generated SDK', 'catalog', 'request history', 'provider tokenization'],
+    }
+    const serializedObservation = JSON.stringify(observation)
+    if (observations.get(agent) !== serializedObservation) {
+      observations.set(agent, serializedObservation)
+      const message = `${name}: ${serializedObservation}`
+      if (initial.estimatedTokens > budget) ctx.logger.warn(message)
+      else ctx.logger.debug(message)
+    }
+    const presentation = assembled.sections.some(section => section.name === 'tools:ptc-only' && section.text !== '') ? 'ptc' : 'native'
+    catalogs.set(agent, {
+      entries: catalogEntries(surface, descriptionMaxLength, { patterns }), presentation,
+      inactive: summarizeInactive(paging.get(agent).inactive, value => catalogDescription(value, descriptionMaxLength)),
+    })
     return assembled
   }, { prepend: true })
 
@@ -333,9 +460,9 @@ export function apply(ctx, config = {}) {
     if (state === undefined) return decision
     const { entries, presentation, inactive } = state
     const candidate = renderCatalogText(entries, presentation, inactive)
-    const visible = agent.session.deriveMessages().filter(message => message.source.kind === name).at(-1)
+    const visible = ctx.liangshenState.published(agent.session, 'catalog')
     const existing = decision.messages.find(message => message.source.kind === name)
-    if (visible !== undefined && textOf(visible) === candidate) {
+    if (visible !== undefined && visible.visible !== false && visible.text === candidate) {
       return existing === undefined ? decision : { ...decision, messages: decision.messages.filter(message => message !== existing) }
     }
     if (existing !== undefined && textOf(existing) === candidate) return decision

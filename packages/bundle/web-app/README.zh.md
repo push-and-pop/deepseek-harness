@@ -46,7 +46,13 @@ dsh --profile web --no-open --port 8080
 
 ### 配置
 
-内置 `liangshen`（Deep模式）预设可直接用于 Web 和 Desktop 的新任务，无需另装插件；默认仍为标准模式。它改编自 [dsh-liangshen](https://github.com/zhu1090093659/dsh-web/tree/dev/packages/dsh-liangshen)，包含精简工作纪律、可选调度者规则、官方 PTC 执行器、持久工具目录、MCP 命名空间分页和关键事实登记簿。工作区指令及沙箱约束仍由 Host 负责。将 `minimal-prompt` 行的 `dispatcher` 设为 `false` 可关闭调度者规则；禁用 `tool-executor-ptc` 行可改用原生调用，目录会跟随执行器，不另设呈现开关。被分页的 MCP 工具必须继承自 Host 或预设，不能直接注册到 Agent 自身。目录、激活工具和 working-context 三行的分页模式与容量必须一致（默认 `mcp__*`、三个命名空间）。本次集成不包含上游拨杆、其他工作区指令投递模式，也不声称基准效果提升。改编模块的许可和署名见随包发布的 [NOTICE](presets/liangshen/NOTICE)。
+内置 `liangshen`（Deep模式）预设可用于 Web 和 Desktop 新任务；标准模式仍为默认。它改编自 [dsh-liangshen](https://github.com/zhu1090093659/dsh-web/tree/dev/packages/dsh-liangshen)，使用官方 PTC 执行器、持久工具目录、MCP 命名空间分页和有界关键事实。工作区指令、计划/目标规则及沙箱约束仍由 Host 负责。
+
+`minimal-prompt` 默认使用精简调度提示；显式设置 `dispatcherDetail: full` 启用原完整规则，`dispatcher: false` 则两者都不添加。禁用 `tool-executor-ptc` 可改用原生调用。隔离的 `liangshen-runtime` 分组通过一个增量 Session 投影为各消费者提供状态；分页模式、容量和事实上限统一配置在 `liangshen-state`，原生和 PTC 成功调用共用同一归约逻辑。被分页的 MCP 工具须继承自 Host/预设，不能直接注册在 Agent 上；动态注册变更会在准入前同步遮罩。
+
+目录的 `maxResidentTokens` 比较工具能力 schema 序列化后的字符数/4估算，不是实际模型词元数或完整请求大小：`budgetMode: warn` 报告超限，`enforce` 则隐藏整个最旧命名空间，常驻工具自身超限时拒绝准入；估算不含 SDK 说明、工具目录消息、其他提示词及历史。响应完成后的独立调试记录会原样转发提供方的请求用量，包括其实际提供的输入、输出、缓存及总量；输入计数不包含缓存词元，缺失的总量不会被编造。
+
+`working-context` 通过 `maxContextChars` 限制完整消息长度，并在达到 `refreshAfterSteps` 次已准入请求、状态变化或压缩后刷新，清空时明确使旧事实失效。字符减少不代表已测得延迟或任务成功率提升。改编模块的许可和署名见随包发布的 [NOTICE](presets/liangshen/NOTICE)。
 
 `minimal` agent preset 使用持久 Shell、`read_image` 工具和固定 persona，支持自动历史压缩以及会话空闲时的 `/compact` 命令。它复用 Host token meter，并拥有隔离的压缩后端。[压缩配置与保留策略](../../compaction/compaction-basic/README.zh.md#use-this-package) 沿用现有后端。图片读取复用 Host 文件系统和附件存储，要求模型支持图片输入；不加载文本读取、写入和编辑工具。
 

@@ -143,16 +143,34 @@
             config:
               keepPlanPolicy: true
               dispatcher: true
-          - id: tool-catalog
-            name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-catalog.mjs'
+              dispatcherDetail: compact
+          - id: liangshen-runtime
+            name: cordis:group
+            group: true
+            isolate:
+              liangshenState: true
             config:
-              descriptionMaxLength: 200
-              pagedToolPatterns: ['mcp__*']
-              maxActiveNamespaces: 3
-              maxResidentTokens: 8000
-          - id: tool-activate
-            name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-activate.mjs'
-          - id: fact-ledger
-            name: '@deepseek-ai/dsh-web-app/presets/liangshen/fact-ledger.mjs'
-          - id: working-context
-            name: '@deepseek-ai/dsh-web-app/presets/liangshen/working-context.mjs'
+              - id: liangshen-state
+                name: '@deepseek-ai/dsh-web-app/presets/liangshen/state.mjs'
+                config:
+                  pagedToolPatterns: ['mcp__*']
+                  maxActiveNamespaces: 3
+                  maxFacts: 12
+                  maxFactChars: 160
+                  maxTagChars: 48
+                  maxLedgerChars: 2200
+              - id: tool-catalog
+                name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-catalog.mjs'
+                config:
+                  descriptionMaxLength: 200
+                  maxResidentTokens: 8000
+                  budgetMode: warn
+              - id: tool-activate
+                name: '@deepseek-ai/dsh-web-app/presets/liangshen/tool-activate.mjs'
+              - id: fact-ledger
+                name: '@deepseek-ai/dsh-web-app/presets/liangshen/fact-ledger.mjs'
+              - id: working-context
+                name: '@deepseek-ai/dsh-web-app/presets/liangshen/working-context.mjs'
+                config:
+                  maxContextChars: 3000
+                  refreshAfterSteps: 4
